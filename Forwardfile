@@ -1,0 +1,16 @@
+# Set the port to forward
+port: 80
+
+# Set the host/vhost to forward
+host: localhost
+
+# Set a static subdomain prefix to use
+# (e.g. myapp-yourcompany.fwd.wf)
+subdomain_prefix: blinds
+
+# Set a CNAME to use
+# cname: foo.example.com
+
+# Set a username and password
+# username: foo
+# password: bar

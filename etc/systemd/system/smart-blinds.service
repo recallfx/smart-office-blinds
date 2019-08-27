@@ -1,0 +1,12 @@
+[Unit]
+Description=Smart blinds web application
+After=network.target pigpiod.service
+
+[Service]
+User=root
+WorkingDirectory=/home/pi/projects/hackdays-smart-blinds
+ExecStart=/home/pi/projects/hackdays-smart-blinds/bin/server
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

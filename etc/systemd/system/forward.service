@@ -1,0 +1,12 @@
+[Unit]
+Description=ForwardHq service for smart blinds
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/pi/projects/hackdays-smart-blinds
+ExecStart=/usr/local/bin/forward
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

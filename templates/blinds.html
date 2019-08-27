@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block title %}Smart office blinds - Blinds{% endblock %}
+{% block body %}
+  <div class="Polaris-Page">
+    <div class="Polaris-Page-Header Polaris-Page-Header--hasNavigation Polaris-Page-Header--hasActionMenu">
+      <div class="Polaris-Page-Header__MainContent">
+        <div class="Polaris-Page-Header__TitleActionMenuWrapper">
+          <div class="Polaris-Page-Header__Title">
+            <div>
+              <h1 class="Polaris-DisplayText Polaris-DisplayText--sizeLarge">Smart office blinds</h1>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="Polaris-Page__Content">
+        <div class="Polaris-Layout">
+            <div class="Polaris-Layout__Section">
+                <div class="Polaris-Card">
+                    <div class="Polaris-Card__Header">
+                        <h2 class="Polaris-Heading">Available actions</h2>
+                    </div>
+                    {% autoescape false %}
+                    {{ channels_html }}
+                    {% endautoescape %}                    
+                </div>
+
+                <div class="Polaris-Card">
+                    <div class="Polaris-Card__Header">
+                    <h2 class="Polaris-Heading">Log</h2>
+                    </div>
+                    <div id="log" class="Polaris-Card__Section">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+  </div>
+{% endblock %}
