@@ -1,6 +1,6 @@
-pigpio
-flask
-requests
-Flask
-google-auth
-google-api-python-client
+Authlib==0.11
+Flask==1.1.1
+google-api-python-client==1.7.11
+google-auth==1.6.3
+requests==2.21.0
+pigpio==1.44
