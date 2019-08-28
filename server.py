@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 
 import functools
+import logging
 
 import flask
-from authlib.client import OAuth2Session
 import google.oauth2.credentials
 import googleapiclient.discovery
+from authlib.client import OAuth2Session
 
 from smart_blinds.actions import Actions
 from smart_blinds.smart_blinds import SmartBlinds, get_user_name
+
+logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
 
 ACCESS_TOKEN_URI = 'https://www.googleapis.com/oauth2/v4/token'
 AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent'
@@ -19,6 +22,7 @@ AUTH_TOKEN_KEY = 'auth_token'
 AUTH_STATE_KEY = 'auth_state'
 
 app = flask.Flask(__name__, instance_relative_config=True)
+app.logger.setLevel(logging.INFO)
 app.config.from_object('config')
 app.config.from_pyfile('config.py')
 app.secret_key = app.config['FN_FLASK_SECRET_KEY']
@@ -35,7 +39,7 @@ def is_logged_in():
 
 def build_credentials():
     if not is_logged_in():
-        raise Exception('User must be logged in')
+        raise AssertionError('User must be logged in')
 
     oauth2_tokens = flask.session[AUTH_TOKEN_KEY]
 
@@ -117,6 +121,10 @@ def no_cache(view):
 smart_blinds = SmartBlinds(app.config)
 
 
+def logger_message(method_name, user_name, message):
+    return '[{0}] {1}: {2}'.format(method_name, user_name, message)
+
+
 @app.route('/', methods=['GET'])
 def api_root():
     text = ''
@@ -133,7 +141,9 @@ def api_root():
 
         try:
             channel_name = smart_blinds.find_channel_by_user_name(user_name)
-        except Exception as exception:
+        except AssertionError as exception:
+            app.logger.warning(logger_message(
+                'api_root', user_name, str(exception)))
             text += '<div class="Polaris-Card__Section">\n'
             text += '<p class="error">{0}</p>\n'.format(str(exception))
             text += '</div>\n'
@@ -149,7 +159,6 @@ def api_root():
                                          is_admin, user_name, channel_name)
 
         if not channel_name is None:
-            print(channel_name)
             channel = app.config['CHANNELS'][channel_name]
             text += render_channel_card_section(
                 channel_name, channel, is_admin, is_allowed_domain, channel_name)
@@ -191,7 +200,9 @@ def api_blinds_main():
 
     try:
         channel_name = smart_blinds.find_channel_by_user_name(user_name)
-    except Exception as exception:
+    except AssertionError as exception:
+        app.logger.warning(logger_message(
+            'api_blinds_main', user_name, str(exception)))
         text += '<div class="Polaris-Card__Section">\n'
         text += '<p class="error">{0}</p>\n'.format(str(exception))
         text += '</div>\n'
@@ -221,13 +232,20 @@ def api_blinds_ajax_control(action):
 
     try:
         user_channel_name = smart_blinds.find_channel_by_user_name(user_name)
-    except Exception as exception:
+    except AssertionError as exception:
         if not is_admin:
+            app.logger.warning(logger_message(
+                'api_blinds_ajax_control', user_name, str(exception)))
             return str(exception), 400
 
     try:
+        app.logger.info(logger_message(
+            'api_blinds_ajax_control', user_name, 'action: {0} channel: {1}'.format(action, channel_name)))
+
         message = smart_blinds.command(action, channel_name, user_name)
-    except Exception as exception:
+    except AssertionError as exception:
+        app.logger.warning(logger_message(
+            'api_blinds_ajax_control', user_name, str(exception)))
         return str(exception), 400
 
     return flask.jsonify({'message': message})
@@ -245,10 +263,15 @@ def api_blinds_control(action):
 
     try:
         if token != app.config['REQUEST_TOKEN']:
-            raise ValueError('Invalid token.')
+            raise AssertionError('Invalid token.')
+
+        app.logger.info(logger_message(
+            'api_blinds_control', user_name, 'action: {0} channel: {1}'.format(action, channel_name)))
 
         return smart_blinds.command(action, channel_name, user_name)
-    except Exception as exception:
+    except AssertionError as exception:
+        app.logger.warning(logger_message(
+            'api_blinds_control ' + user_name, str(exception)))
         return str(exception), 400
 
 

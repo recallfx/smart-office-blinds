@@ -54,7 +54,7 @@ def _get_room_id_map(file_name):
 class SmartBlinds():
     def __init__(self, config):
         if config is None:
-            raise ValueError('Missing config')
+            raise AssertionError('Missing config')
 
         self.config = config
         self.channels = self.config["CHANNELS"]
@@ -90,12 +90,12 @@ class SmartBlinds():
         room_id = self._find_room_id(user_name)
 
         if room_id is None:
-            raise LookupError('Could not find your seat!')
+            raise AssertionError('Could not find your seat!')
 
         channel_name = self._find_channel(room_id)
 
         if channel_name is None:
-            raise LookupError('Could not find your channel, try manually.')
+            raise AssertionError('Could not find your channel, try manually.')
 
         return channel_name
 
