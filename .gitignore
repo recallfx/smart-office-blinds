@@ -63,3 +63,4 @@ vilnius_map.json
 instance/
 .DS_Store
 .vscode/
+venv/
