@@ -20,3 +20,13 @@ CHANNELS = {
 
 DATA = 'smart_blinds/data/some_file.json'
 DEBUG = False
+
+AUTH_REDIRECT_URI = 'http://127.0.0.1/google/auth'
+BASE_URI = 'http://127.0.0.1'
+CLIENT_ID = 'your google client id'
+CLIENT_SECRET = 'your google client secret'
+FN_FLASK_SECRET_KEY = 'SOMETHING RANDOM AND SECRET'
+REQUEST_TOKEN = 'SOMETHING RANDOM AND SECRET'
+
+ADMIN_EMAILS = []
+ALLOWED_EMAIL_DOMAIN = '@gmail.com'

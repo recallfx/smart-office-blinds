@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% block title %}Smart office blinds - Root{% endblock %}
+{% block title %}Smart office blinds - Main{% endblock %}
 {% block body %}
   <div class="Polaris-Page">
     <div class="Polaris-Page-Header Polaris-Page-Header--hasNavigation Polaris-Page-Header--hasActionMenu">
@@ -17,13 +17,16 @@
         <div class="Polaris-Layout">
             <div class="Polaris-Layout__Section">
                 <div class="Polaris-Card">
-                    <div class="Polaris-Card__Header">
-                        <h2 class="Polaris-Heading">Routes</h2>
-                    </div>
-                    <div class="Polaris-Card__Section">
                     {% autoescape false %}
                     {{ main }}
                     {% endautoescape %}
+                </div>
+
+                <div class="Polaris-Card">
+                    <div class="Polaris-Card__Header">
+                    <h2 class="Polaris-Heading">Log</h2>
+                    </div>
+                    <div id="log" class="Polaris-Card__Section">
                     </div>
                 </div>
             </div>

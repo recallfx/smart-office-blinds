@@ -17,6 +17,12 @@ def _get_processors(channels, debug_mode=False):
     return processors
 
 
+def get_user_name(name):
+    if name:
+        return name.replace(" ", ".").lower()
+
+    return name
+
 def _get_room_id_map(file_name):
     room_ids = {}
 
@@ -34,14 +40,13 @@ def _get_room_id_map(file_name):
                     emplyee = seat["employee"]
 
                     if "fullName" in emplyee and not emplyee["fullName"] is None:
-                        full_name = emplyee["fullName"].replace(
-                            " ", ".").lower()
+                        user_name = get_user_name(emplyee["fullName"])
 
                         if "room" in seat and not seat["room"] is None:
                             room = seat["room"]
 
                             if "id" in seat and not room["id"] is None:
-                                room_ids[full_name] = room["id"]
+                                room_ids[user_name] = room["id"]
 
     return room_ids
 
@@ -77,23 +82,27 @@ class SmartBlinds():
                     return key
         return None
 
+    def find_channel_by_user_name(self, user_name):
+        if user_name is None:
+            raise AssertionError(
+                'User name must be provided.')
+
+        room_id = self._find_room_id(user_name)
+
+        if room_id is None:
+            raise LookupError('Could not find your seat!')
+
+        channel_name = self._find_channel(room_id)
+
+        if channel_name is None:
+            raise LookupError('Could not find your channel, try manually.')
+
+        return channel_name
+
     def command(self, action, channel_name=None, user_name=None):
         if channel_name is None:
-            if user_name is None:
-                raise AssertionError(
-                    'User name must be provided when channel is auto.')
+            channel_name = self.find_channel_by_user_name(user_name)
 
-            room_id = self._find_room_id(user_name)
-
-            if room_id is None:
-                raise LookupError('Could not find your seat!')
-
-            channel_name = self._find_channel(room_id)
-
-            if channel_name is None:
-                raise LookupError('Could not find your channel, try manually.')
-
-        print(channel_name)
         if not channel_name in self.processors.keys():
             raise AssertionError('Unsupported channel "{0}"'.format(channel_name))
 
