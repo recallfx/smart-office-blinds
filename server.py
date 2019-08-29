@@ -9,7 +9,7 @@ import googleapiclient.discovery
 from authlib.client import OAuth2Session
 
 from smart_blinds.actions import Actions
-from smart_blinds.smart_blinds import SmartBlinds, get_user_name
+from smart_blinds.smart_blinds import SmartBlinds
 
 logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
 
@@ -33,6 +33,14 @@ BASE_URI = app.config['BASE_URI']
 CLIENT_ID = app.config['CLIENT_ID']
 CLIENT_SECRET = app.config['CLIENT_SECRET']
 
+
+def get_user_name(email):
+    email_split = email.split('@')
+
+    if len(email_split) > 1:
+        return email_split[0]
+
+    return email
 
 def is_logged_in():
     return True if AUTH_TOKEN_KEY in flask.session else False
@@ -144,7 +152,8 @@ def api_root():
         is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
         is_allowed_domain = user_info['email'].endswith(
             app.config['ALLOWED_EMAIL_DOMAIN'])
-        user_name = get_user_name(user_info['name'])
+        
+        user_name = get_user_name(user_info['email'])
 
         try:
             channel_name = smart_blinds.find_channel_by_user_name(user_name)
@@ -187,7 +196,7 @@ def api_blinds_main():
     is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
     is_allowed_domain = user_info['email'].endswith(
         app.config['ALLOWED_EMAIL_DOMAIN'])
-    user_name = get_user_name(user_info['name'])
+    user_name = get_user_name(user_info['email'])
     channel_name = None
 
     text = ''
@@ -230,7 +239,7 @@ def api_blinds_ajax_control(action):
     is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
     is_allowed_domain = user_info['email'].endswith(
         app.config['ALLOWED_EMAIL_DOMAIN'])
-    user_name = get_user_name(user_info['name'])
+    user_name = get_user_name(user_info['email'])
 
     if not is_admin and not is_allowed_domain:
         return 'Not authorised!', 403

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import unicodedata
 
 from .actions import Actions
 from .processor import Processor
@@ -19,6 +20,8 @@ def _get_processors(channels, debug_mode=False):
 
 def get_user_name(name):
     if name:
+        name = unicodedata.normalize('NFKD', name).encode('ascii','ignore')
+
         return name.replace(" ", ".").lower()
 
     return name
