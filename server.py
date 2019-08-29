@@ -20,6 +20,7 @@ AUTHORIZATION_SCOPE = 'openid email profile'
 
 AUTH_TOKEN_KEY = 'auth_token'
 AUTH_STATE_KEY = 'auth_state'
+USER_INFO_KEY = 'user_info'
 
 app = flask.Flask(__name__, instance_relative_config=True)
 app.logger.setLevel(logging.INFO)
@@ -52,13 +53,19 @@ def build_credentials():
 
 
 def get_user_info():
+    if USER_INFO_KEY in flask.session:
+        return flask.session[USER_INFO_KEY]
+
     credentials = build_credentials()
 
     oauth2_client = googleapiclient.discovery.build(
         'oauth2', 'v2',
         credentials=credentials)
 
-    return oauth2_client.userinfo().get().execute()
+    user_info = oauth2_client.userinfo().get().execute()
+    flask.session[USER_INFO_KEY] = user_info
+
+    return user_info
 
 
 def render_user_card_section(is_allowed_domain, is_admin, user_name, channel_name):
@@ -310,6 +317,8 @@ def google_auth_redirect():
 
     flask.session[AUTH_TOKEN_KEY] = oauth2_tokens
 
+    get_user_info()
+
     return flask.redirect(BASE_URI, code=302)
 
 
@@ -318,5 +327,6 @@ def google_auth_redirect():
 def logout():
     flask.session.pop(AUTH_TOKEN_KEY, None)
     flask.session.pop(AUTH_STATE_KEY, None)
+    flask.session.pop(USER_INFO_KEY, None)
 
     return flask.redirect(BASE_URI, code=302)
