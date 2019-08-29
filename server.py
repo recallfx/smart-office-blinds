@@ -42,6 +42,7 @@ def get_user_name(email):
 
     return email
 
+
 def is_logged_in():
     return True if AUTH_TOKEN_KEY in flask.session else False
 
@@ -76,21 +77,18 @@ def get_user_info():
     return user_info
 
 
-def render_user_card_section(is_allowed_domain, is_admin, user_name, link):
+def render_user_card_section(is_allowed_domain, is_admin, email, link):
     text = ''
     text += '<div class="Polaris-Card__Section">\n'
     text += '<div class="Polaris-Stack">\n'
     if is_admin:
         text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Attention</span>Admin</span></div>\n'
 
-    if is_allowed_domain:
-        text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusSuccess"><span class="Polaris-VisuallyHidden">Allowed domain</span>shopify.com</span></div>\n'
-    else:
-        text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Not allowed domain</span>Wrong domain</span></div>\n'
-
-    text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusSuccess"><span class="Polaris-VisuallyHidden">User name</span>{0}</span></div>\n'.format(user_name)
-
-    text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="{0}">{1}</a></div>\n'.format(link[1], link[0])
+    email_badge = 'statusSuccess' if is_allowed_domain else 'statusAttention'
+    text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--{0}"><span class="Polaris-VisuallyHidden">Email</span>{1}</span></div>\n'.format(
+        email_badge, email)
+    text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="{0}">{1}</a></div>\n'.format(
+        link[1], link[0])
     text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/google/logout">Logout</a></div>\n'
     text += '</div>\n'
     text += '</div>\n'
@@ -156,7 +154,7 @@ def api_root():
         is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
         is_allowed_domain = user_info['email'].endswith(
             app.config['ALLOWED_EMAIL_DOMAIN'])
-        
+
         channel_name = None
         user_name = get_user_name(user_info['email'])
 
@@ -170,7 +168,7 @@ def api_root():
             text += '</div>\n'
 
         text += render_user_card_section(is_allowed_domain,
-                                         is_admin, user_name, ('Channel list', '/blinds'))
+                                         is_admin, user_info['email'], ('Channel list', '/blinds'))
 
         if not channel_name is None:
             channel = app.config['CHANNELS'][channel_name]
@@ -203,7 +201,7 @@ def api_blinds_main():
     text += '</div>\n'
 
     text += render_user_card_section(is_allowed_domain,
-                                     is_admin, user_name, ('Main', '/'))
+                                     is_admin, user_info['email'], ('Main', '/'))
 
     try:
         channel_name = smart_blinds.find_channel_by_user_name(user_name)
