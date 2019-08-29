@@ -18,14 +18,6 @@ def _get_processors(channels, debug_mode=False):
     return processors
 
 
-def get_user_name(name):
-    if name:
-        name = unicodedata.normalize('NFKD', name).encode('ascii','ignore')
-
-        return name.replace(" ", ".").lower()
-
-    return name
-
 def _get_room_id_map(file_name):
     room_ids = {}
 
@@ -43,7 +35,10 @@ def _get_room_id_map(file_name):
                     emplyee = seat["employee"]
 
                     if "fullName" in emplyee and not emplyee["fullName"] is None:
-                        user_name = get_user_name(emplyee["fullName"])
+                        full_name = emplyee["fullName"]
+                        full_name = unicodedata.normalize('NFKD', full_name).encode(
+                            'ascii', 'ignore').decode("utf-8")
+                        user_name = full_name.replace(" ", ".").lower()
 
                         if "room" in seat and not seat["room"] is None:
                             room = seat["room"]
@@ -90,7 +85,7 @@ class SmartBlinds():
             raise AssertionError(
                 'User name must be provided.')
 
-        room_id = self._find_room_id(user_name)
+        room_id = self._find_room_id(str(user_name))
 
         if room_id is None:
             raise AssertionError('Could not find your seat!')
@@ -107,7 +102,8 @@ class SmartBlinds():
             channel_name = self.find_channel_by_user_name(user_name)
 
         if not channel_name in self.processors.keys():
-            raise AssertionError('Unsupported channel "{0}"'.format(channel_name))
+            raise AssertionError(
+                'Unsupported channel "{0}"'.format(channel_name))
 
         if action == Actions.OPEN:
             self.processors[channel_name].queue.put('open')

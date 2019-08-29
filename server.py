@@ -153,6 +153,7 @@ def api_root():
         is_allowed_domain = user_info['email'].endswith(
             app.config['ALLOWED_EMAIL_DOMAIN'])
         
+        channel_name = None
         user_name = get_user_name(user_info['email'])
 
         try:
