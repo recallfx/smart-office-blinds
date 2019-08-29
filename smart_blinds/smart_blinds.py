@@ -93,7 +93,7 @@ class SmartBlinds():
         channel_name = self._find_channel(room_id)
 
         if channel_name is None:
-            raise AssertionError('Could not find your channel, try manually.')
+            raise AssertionError('Could not find your channel')
 
         return channel_name
 

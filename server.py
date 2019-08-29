@@ -76,21 +76,25 @@ def get_user_info():
     return user_info
 
 
-def render_user_card_section(is_allowed_domain, is_admin, user_name, channel_name):
+def render_user_card_section(is_allowed_domain, is_admin, user_name, link):
     text = ''
     text += '<div class="Polaris-Card__Section">\n'
-    text += '</p>\n'
-    if is_allowed_domain:
-        text += '<span class="Polaris-Badge Polaris-Badge--statusSUccess"><span class="Polaris-VisuallyHidden">Success</span>shopify.com</span>'
-    else:
-        text += '<span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Attention</span>not shopify.com</span>'
-
+    text += '<div class="Polaris-Stack">\n'
     if is_admin:
-        text += '<span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Attention</span>Admin</span>'
-    text += '<span>User name: {0}</span>\n'.format(user_name)
-    text += '<span>Channel: {0}</span>\n'.format(channel_name)
-    text += '</p>\n'
+        text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Attention</span>Admin</span></div>\n'
+
+    if is_allowed_domain:
+        text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusSuccess"><span class="Polaris-VisuallyHidden">Allowed domain</span>shopify.com</span></div>\n'
+    else:
+        text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Not allowed domain</span>Wrong domain</span></div>\n'
+
+    text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusSuccess"><span class="Polaris-VisuallyHidden">User name</span>{0}</span></div>\n'.format(user_name)
+
+    text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="{0}">{1}</a></div>\n'.format(link[1], link[0])
+    text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/google/logout">Logout</a></div>\n'
     text += '</div>\n'
+    text += '</div>\n'
+
     return text
 
 
@@ -108,7 +112,7 @@ def render_channel_card_section(key, channel, is_admin, is_allowed_domain, chann
     for action in [Actions.OPEN, Actions.CLOSE, Actions.STOP]:
         url = '/blinds/ajax/' + action + '?channel_name=' + key
 
-        if is_admin or is_allowed_domain and channel_name == key:
+        if is_admin or is_allowed_domain:
             text += '<div class="Polaris-ButtonGroup__Item"><button type="button" class="Polaris-Button" onclick="command(\'{0}\')"><span class="Polaris-Button__Content"><span class="Polaris-Button__Text">{1}</span></span></button></div>\n'.format(
                 url, action)
         else:
@@ -165,15 +169,8 @@ def api_root():
             text += '<p class="error">{0}</p>\n'.format(str(exception))
             text += '</div>\n'
 
-        text += '<div class="Polaris-Card__Section">\n'
-        text += '<div class="Polaris-Stack">\n'
-        text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/blinds">Channel list</a></div>\n'
-        text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/google/logout">Logout</a></div>\n'
-        text += '</div>\n'
-        text += '</div>\n'
-
         text += render_user_card_section(is_allowed_domain,
-                                         is_admin, user_name, channel_name)
+                                         is_admin, user_name, ('Channel list', '/blinds'))
 
         if not channel_name is None:
             channel = app.config['CHANNELS'][channel_name]
@@ -205,15 +202,8 @@ def api_blinds_main():
     text += '<h2 class="Polaris-Heading">Channel list</h2>\n'
     text += '</div>\n'
 
-    text += '<div class="Polaris-Card__Section">\n'
-    text += '<div class="Polaris-Stack">\n'
-    text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/">Main</a></div>\n'
-    text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/google/logout">Logout</a></div>\n'
-    text += '</div>\n'
-    text += '</div>\n'
-
     text += render_user_card_section(is_allowed_domain,
-                                     is_admin, user_name, channel_name)
+                                     is_admin, user_name, ('Main', '/'))
 
     try:
         channel_name = smart_blinds.find_channel_by_user_name(user_name)
@@ -246,14 +236,6 @@ def api_blinds_ajax_control(action):
         return 'Not authorised!', 403
 
     channel_name = flask.request.args.get('channel_name')
-
-    try:
-        user_channel_name = smart_blinds.find_channel_by_user_name(user_name)
-    except AssertionError as exception:
-        if not is_admin:
-            app.logger.warning(logger_message(
-                'api_blinds_ajax_control', user_name, str(exception)))
-            return str(exception), 400
 
     try:
         app.logger.info(logger_message(
