@@ -250,13 +250,16 @@ def api_blinds_ajax_control(action):
 
 @app.route('/blinds/<action>', methods=["GET", "POST"])
 def api_blinds_control(action):
-    if flask.request.form.get('channel_name'):
-        channel_name = flask.request.form.get('channel_name')
-    else:
-        channel_name = flask.request.args.get('channel_name')
+    test = flask.request.args.get('test')
+    channel_name = flask.request.args.get('channel_name')
+    token = flask.request.args.get('token')
+    user_name = flask.request.args.get('user_name')
 
-    token = flask.request.form.get('token')
-    user_name = flask.request.form.get('user_name')
+    if not channel_name:
+        channel_name = flask.request.form.get('channel_name')
+
+    if not user_name:
+        user_name = flask.request.form.get('user_name')
 
     try:
         if token != app.config['REQUEST_TOKEN']:
@@ -265,10 +268,13 @@ def api_blinds_control(action):
         app.logger.info(logger_message(
             'api_blinds_control', user_name, 'action: {0} channel: {1}'.format(action, channel_name)))
 
+        if test:
+            return '[Test] Channel({0}) Token({1}) User({2}) Action({3})'.format(channel_name, token, user_name, action)
+
         return smart_blinds.command(action, channel_name, user_name)
     except AssertionError as exception:
         app.logger.warning(logger_message(
-            'api_blinds_control ' + user_name, str(exception)))
+            'api_blinds_control ', user_name, str(exception)))
         return str(exception), 400
 
 
