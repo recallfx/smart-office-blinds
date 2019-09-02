@@ -35,19 +35,7 @@ CLIENT_SECRET = app.config['CLIENT_SECRET']
 
 
 def render_slack_help():
-    result = flask.make_response([
-        {
-            'type': 'section',
-            'text': {
-                'type': 'mrkdwn',
-                'text': 'Slack commands currently support only automatic mode. For more control see <{0}/blinds>'.format(BASE_URI)
-            }
-        }
-    ])
-    result.mimetype = 'application/json'
-
-    return result
-
+    return 'Slack commands currently support only automatic mode. For more control see <{0}/blinds>'.format(BASE_URI)
 
 def get_user_name(email):
     email_split = email.split('@')
