@@ -35,7 +35,7 @@ CLIENT_SECRET = app.config['CLIENT_SECRET']
 
 
 def render_slack_help():
-    return flask.jsonify([
+    result = flask.make_response([
         {
             'type': 'section',
             'text': {
@@ -44,6 +44,10 @@ def render_slack_help():
             }
         }
     ])
+    result.mimetype = 'application/json'
+
+    return result
+
 
 def get_user_name(email):
     email_split = email.split('@')
