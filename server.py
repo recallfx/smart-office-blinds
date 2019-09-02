@@ -34,6 +34,17 @@ CLIENT_ID = app.config['CLIENT_ID']
 CLIENT_SECRET = app.config['CLIENT_SECRET']
 
 
+def render_slack_help():
+    return flask.jsonify([
+        {
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': 'Slack commands currently support only automatic mode. For more control see <{0}/blinds>'.format(BASE_URI)
+            }
+        }
+    ])
+
 def get_user_name(email):
     email_split = email.split('@')
 
@@ -267,6 +278,9 @@ def api_blinds_control(action):
 
         app.logger.info(logger_message(
             'api_blinds_control', user_name, 'action: {0} channel: {1}'.format(action, channel_name)))
+
+        if action == 'help':
+            return render_slack_help()
 
         if test:
             return '[Test] Channel({0}) Token({1}) User({2}) Action({3})'.format(channel_name, token, user_name, action)
