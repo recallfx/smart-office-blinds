@@ -5,7 +5,7 @@ After=network.target pigpiod.service
 [Service]
 User=root
 WorkingDirectory=/home/pi/projects/hackdays-smart-blinds
-ExecStart=/home/pi/projects/hackdays-smart-blinds/bin/server
+ExecStart=/home/pi/projects/hackdays-smart-blinds/bin/server_production
 Restart=always
 
 [Install]
