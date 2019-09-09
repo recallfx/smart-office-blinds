@@ -27,6 +27,10 @@ class Slack(Process):
         if self.debug_mode:
             print('Response message: ' + message)
             return
+
+        self.app.logger.info(logger_message(
+            user_name, response_url))
+
         slack_response = requests.get(response_url, json={'text': message})
 
         if slack_response.status_code != 200:
@@ -67,11 +71,11 @@ class Slack(Process):
 
         user_name = get_user_name(user_email)
 
-        self.app.logger.info(logger_message(
-            user_email, 'action: {0} channel: {1}'.format(action, channel_name)))
-
         channel_name = find_channel_by_user_name(
             self.room_id_map, self.channels, user_name)
+
+        self.app.logger.info(logger_message(
+            user_email, 'action: {0} channel: {1}'.format(action, channel_name)))
 
         message = validate_command(self.channels, action, channel_name)
         self.smart_blinds.command(action, channel_name)

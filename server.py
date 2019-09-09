@@ -49,6 +49,7 @@ smart_blinds = SmartBlinds(CHANNELS, DEBUG)
 slack = Slack(app, room_id_map, CHANNELS, smart_blinds, DEBUG)
 slack.start()
 
+
 def render_slack_help():
     return 'Slack commands currently support only automatic mode. For more control see <{0}/blinds>'.format(BASE_URI)
 
@@ -56,8 +57,6 @@ def render_slack_help():
 def get_param(key):
     result = flask.request.args.get(key)
 
-    print(key)
-    print(result)
     if not result:
         result = flask.request.form.get(key)
     return result
@@ -279,7 +278,7 @@ def api_blinds_slack_control(action):
             return render_slack_help()
 
         slack.queue.put({
-            'action': action, 
+            'action': action,
             'channel_name': channel_name,
             'user_name': user_name,
             'user_id': user_id,
