@@ -4,7 +4,7 @@ from multiprocessing import Process, Queue
 
 import requests
 
-from smart_blinds.utils import (find_channel_by_user_name, get_user_name,
+from .utils import (find_channel_by_user_name, get_user_name,
                                 logger_message, validate_command)
 
 
