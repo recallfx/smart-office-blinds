@@ -31,7 +31,7 @@ class Slack(Process):
         self.app.logger.info(logger_message(
             user_name, response_url))
 
-        slack_response = requests.get(response_url, json={'text': message})
+        slack_response = requests.post(response_url, json={'text': message})
 
         if slack_response.status_code != 200:
             self.app.logger.error(logger_message(
