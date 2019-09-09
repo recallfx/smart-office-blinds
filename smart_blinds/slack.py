@@ -38,7 +38,7 @@ class Slack(Process):
                 user_name, slack_response.text))
 
     def get_slack_user_email(self, user_name, user_id):
-        if user_id in self.users:
+        if user_id in self.users.keys():
             self.app.logger.info(logger_message(
                 user_name, 'Using cached slack user email: ' + self.users[user_id]))
             return self.users[user_id]
@@ -61,7 +61,9 @@ class Slack(Process):
             raise AssertionError(
                 'Unable to retrieve user data from Slacl API.')
 
-        return data['user']['profile']['email']
+        self.users[user_id] = data['user']['profile']['email']
+
+        return self.users[user_id]
 
     def command(self, action, channel_name, user_name, user_id):
         user_email = self.get_slack_user_email(user_name, user_id)
