@@ -241,6 +241,9 @@ def api_blinds_ajax_control(action):
 
     channel_name = flask.request.args.get('channel_name')
 
+    if channel_name == '':
+        channel_name = None
+
     try:
         app.logger.info(logger_message(
             user_email, 'action: {0} channel: {1}'.format(action, channel_name)))
@@ -264,6 +267,9 @@ def api_blinds_slack_control(action):
     user_id = get_param('user_id')
     user_name = get_param('user_name')
     response_url = get_param('response_url')
+
+    if channel_name == '':
+        channel_name = None
 
     try:
         if token != app.config['SLACK_VERIFICATION_TOKEN']:
