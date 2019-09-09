@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import functools
-import inspect
 import logging
 
 import flask
 import google.oauth2.credentials
 import googleapiclient.discovery
-import requests
 from authlib.client import OAuth2Session
 
 from smart_blinds.actions import Actions
+from smart_blinds.slack import Slack
 from smart_blinds.smart_blinds import SmartBlinds
+from smart_blinds.utils import (find_channel_by_user_name, get_room_id_map,
+                                get_user_name, logger_message,
+                                validate_command)
 
 logging.getLogger('googleapicliet.discovery_cache').setLevel(logging.ERROR)
 
@@ -34,27 +36,31 @@ AUTH_REDIRECT_URI = app.config['AUTH_REDIRECT_URI']
 BASE_URI = app.config['BASE_URI']
 CLIENT_ID = app.config['CLIENT_ID']
 CLIENT_SECRET = app.config['CLIENT_SECRET']
+CHANNELS = app.config["CHANNELS"]
+DATA = app.config["DATA"]
+DEBUG = app.config["DEBUG"]
+ADMIN_EMAILS = app.config['ADMIN_EMAILS']
 
+app.logger.info('Loading data from file: ' + DATA)
+room_id_map = get_room_id_map(DATA)
+
+smart_blinds = SmartBlinds(CHANNELS, DEBUG)
+
+slack = Slack(app, room_id_map, CHANNELS, smart_blinds, DEBUG)
+slack.start()
 
 def render_slack_help():
     return 'Slack commands currently support only automatic mode. For more control see <{0}/blinds>'.format(BASE_URI)
 
 
 def get_param(key):
-    result = flask.request.form.get(key)
+    result = flask.request.args.get(key)
 
+    print(key)
+    print(result)
     if not result:
         result = flask.request.form.get(key)
     return result
-
-
-def get_user_name(email):
-    email_split = email.split('@')
-
-    if len(email_split) > 1:
-        return email_split[0]
-
-    return email
 
 
 def is_logged_in():
@@ -110,7 +116,7 @@ def render_user_card_section(is_allowed_domain, is_admin, email, link):
     return text
 
 
-def render_channel_card_section(key, channel, is_admin, is_allowed_domain, channel_name):
+def render_channel_card_section(key, channel, is_admin, is_allowed_domain):
     label = channel['label']
 
     text = ''
@@ -149,15 +155,6 @@ def no_cache(view):
     return functools.update_wrapper(no_cache_impl, view)
 
 
-def logger_message(user_name, message):
-    method_name = inspect.stack()[1][3]
-
-    return '[{0}:{1}] {2}'.format(method_name, user_name, str(message))
-
-
-smart_blinds = SmartBlinds(app.config)
-
-
 @app.route('/', methods=['GET'])
 def api_root():
     text = ''
@@ -167,7 +164,7 @@ def api_root():
 
     if is_logged_in():
         user_info = get_user_info()
-        is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
+        is_admin = user_info['email'] in ADMIN_EMAILS
         is_allowed_domain = user_info['email'].endswith(
             app.config['ALLOWED_EMAIL_DOMAIN'])
 
@@ -176,7 +173,8 @@ def api_root():
         user_email = user_info['email']
 
         try:
-            channel_name = smart_blinds.find_channel_by_user_name(user_name)
+            channel_name = find_channel_by_user_name(
+                room_id_map, CHANNELS, user_name)
         except AssertionError as exception:
             app.logger.warning(logger_message(user_email, exception))
             text += '<div class="Polaris-Card__Section">\n'
@@ -189,7 +187,7 @@ def api_root():
         if not channel_name is None:
             channel = app.config['CHANNELS'][channel_name]
             text += render_channel_card_section(
-                channel_name, channel, is_admin, is_allowed_domain, channel_name)
+                channel_name, channel, is_admin, is_allowed_domain)
 
     else:
         text += '<div class="Polaris-Card__Section">\n'
@@ -208,9 +206,7 @@ def api_blinds_main():
     is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
     is_allowed_domain = user_info['email'].endswith(
         app.config['ALLOWED_EMAIL_DOMAIN'])
-    user_name = get_user_name(user_info['email'])
     user_email = user_info['email']
-    channel_name = None
 
     text = ''
     text += '<div class="Polaris-Card__Header">\n'
@@ -220,17 +216,9 @@ def api_blinds_main():
     text += render_user_card_section(is_allowed_domain,
                                      is_admin, user_email, ('Main', '/'))
 
-    try:
-        channel_name = smart_blinds.find_channel_by_user_name(user_name)
-    except AssertionError as exception:
-        app.logger.warning(logger_message(user_email, exception))
-        text += '<div class="Polaris-Card__Section">\n'
-        text += '<p class="error">{0}</p>\n'.format(str(exception))
-        text += '</div>\n'
-
-    for key, channel in sorted(app.config['CHANNELS'].items()):
+    for key, channel in sorted(CHANNELS.items()):
         text += render_channel_card_section(key, channel,
-                                            is_admin, is_allowed_domain, channel_name)
+                                            is_admin, is_allowed_domain)
 
     return flask.render_template("blinds.html", channels_html=text)
 
@@ -241,7 +229,7 @@ def api_blinds_ajax_control(action):
         return 'Not authorised!', 403
 
     user_info = get_user_info()
-    is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
+    is_admin = user_info['email'] in ADMIN_EMAILS
     is_allowed_domain = user_info['email'].endswith(
         app.config['ALLOWED_EMAIL_DOMAIN'])
 
@@ -257,7 +245,11 @@ def api_blinds_ajax_control(action):
         app.logger.info(logger_message(
             user_email, 'action: {0} channel: {1}'.format(action, channel_name)))
 
-        message = smart_blinds.command(action, channel_name, user_name)
+        channel_name = find_channel_by_user_name(
+            room_id_map, CHANNELS, user_name)
+
+        message = validate_command(CHANNELS, action, channel_name)
+        smart_blinds.command(action, channel_name)
     except AssertionError as exception:
         app.logger.warning(logger_message(user_email, exception))
         return str(exception), 400
@@ -267,42 +259,28 @@ def api_blinds_ajax_control(action):
 
 @app.route('/blinds/slack/<action>', methods=["GET", "POST"])
 def api_blinds_slack_control(action):
-    test = get_param('test')
     channel_name = get_param('text')
     token = get_param('token')
     user_id = get_param('user_id')
     user_name = get_param('user_name')
+    response_url = get_param('response_url')
 
     try:
         if token != app.config['SLACK_VERIFICATION_TOKEN']:
             raise AssertionError('Invalid slack verification token.')
 
-        slack_response = requests.get('https://slack.com/api/users.info?token={0}&user={1}'.format(
-            app.config['SLACK_OAUTH_ACCESS_TOKEN'], user_id))
-
-        if slack_response.status_code != 200:
-            app.logger.error(logger_message(user_name, slack_response.text))
-            raise AssertionError('Could not contact Slack API.')
-
-        data = slack_response.json()
-
-        if not data['ok']:
-            app.logger.error(logger_message(user_name, slack_response.text))
-            raise AssertionError(
-                'Unable to retrieve user data from Slacl API.')
-
         if action == 'help':
             return render_slack_help()
 
-        user_email = data['user']['profile']['email']
+        slack.queue.put({
+            'action': action, 
+            'channel_name': channel_name,
+            'user_name': user_name,
+            'user_id': user_id,
+            'response_url': response_url
+        })
 
-        if test:
-            return '[Test] Action({0}) Channel({1}) User({2}) Email ({3})'.format(action, channel_name, user_name, user_email)
-
-        app.logger.info(logger_message(
-            user_email, 'action: {0} channel: {1}'.format(action, channel_name)))
-
-        return smart_blinds.command(action, channel_name, get_user_name(user_email))
+        return ''
     except AssertionError as exception:
         app.logger.warning(logger_message(user_name, exception))
         return str(exception), 400

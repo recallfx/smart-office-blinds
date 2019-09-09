@@ -40,3 +40,13 @@ Console
 ```
 python3 -m smart_blinds open -u john.doe
 ```
+
+
+Note
+----
+
+On Mac Os use this to work:
+
+```
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+```
