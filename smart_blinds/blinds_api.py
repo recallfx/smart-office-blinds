@@ -10,7 +10,7 @@ MAX_TOGGLE_COUNT = 6
 OPEN_TIME_TO_30_PERCENT = 16
 CLOSE_TIME_TO_30_PERCENT = 45
 TIME_TO_FULL_CLOSE_OPEN = 60
-
+PARTIAL_OPEN_TIMES = 4
 
 class BlindsApi():
     state = Actions.IDLE
@@ -121,9 +121,8 @@ class BlindsApi():
             time.sleep(OPEN_TIME_TO_30_PERCENT)
             self.stop()
 
-        self.position_toggle()
-        self.position_toggle()
-        self.position_toggle()
+        for _ in range(PARTIAL_OPEN_TIMES):
+            self.position_toggle()
 
     def position_toggle(self):
         if self.state != Actions.IDLE:
