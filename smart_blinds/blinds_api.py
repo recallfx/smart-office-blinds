@@ -6,9 +6,9 @@ import pigpio
 
 from .actions import Actions
 
-MAX_TOGGLE_COUNT = 7
-OPEN_TIME_TO_30_PERCENT = 20
-CLOSE_TIME_TO_30_PERCENT = 40
+MAX_TOGGLE_COUNT = 6
+OPEN_TIME_TO_30_PERCENT = 16
+CLOSE_TIME_TO_30_PERCENT = 45
 TIME_TO_FULL_CLOSE_OPEN = 60
 
 
@@ -120,6 +120,10 @@ class BlindsApi():
             self.open()
             time.sleep(OPEN_TIME_TO_30_PERCENT)
             self.stop()
+
+        self.position_toggle()
+        self.position_toggle()
+        self.position_toggle()
 
     def position_toggle(self):
         if self.state != Actions.IDLE:
