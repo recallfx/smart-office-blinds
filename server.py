@@ -96,16 +96,13 @@ def get_user_info():
     return user_info
 
 
-def render_user_card_section(is_allowed_domain, is_admin, email, link):
+def render_user_card_section(email, link):
     text = ''
     text += '<div class="Polaris-Card__Section">\n'
     text += '<div class="Polaris-Stack">\n'
-    if is_admin:
-        text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusAttention"><span class="Polaris-VisuallyHidden">Attention</span>Admin</span></div>\n'
 
-    email_badge = 'statusSuccess' if is_allowed_domain else 'statusAttention'
-    text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--{0}"><span class="Polaris-VisuallyHidden">Email</span>{1}</span></div>\n'.format(
-        email_badge, email)
+    text += '<div class="Polaris-Stack__Item"><span class="Polaris-Badge Polaris-Badge--statusSuccess"><span class="Polaris-VisuallyHidden">Email</span>{0}</span></div>\n'.format(
+        email)
     text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="{0}">{1}</a></div>\n'.format(
         link[1], link[0])
     text += '<div class="Polaris-Stack__Item"><a class="Polaris-Link" href="/google/logout">Logout</a></div>\n'
@@ -115,7 +112,7 @@ def render_user_card_section(is_allowed_domain, is_admin, email, link):
     return text
 
 
-def render_channel_card_section(key, channel, is_admin, is_allowed_domain):
+def render_channel_card_section(key, channel):
     label = channel['label']
 
     text = ''
@@ -126,15 +123,12 @@ def render_channel_card_section(key, channel, is_admin, is_allowed_domain):
 
     text += '<div class="Polaris-ButtonGroup">\n'
 
-    for action in [Actions.OPEN, Actions.CLOSE, Actions.STOP]:
+    for action in [Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.OPEN, Actions.CLOSE, Actions.STOP]:
         url = '/blinds/ajax/' + action + '?channel_name=' + key
 
-        if is_admin or is_allowed_domain:
-            text += '<div class="Polaris-ButtonGroup__Item"><button type="button" class="Polaris-Button" onclick="command(\'{0}\')"><span class="Polaris-Button__Content"><span class="Polaris-Button__Text">{1}</span></span></button></div>\n'.format(
-                url, action)
-        else:
-            text += '<div class="Polaris-ButtonGroup__Item"><button type="button" class="Polaris-Button Polaris-Button--disabled" disabled><span class="Polaris-Button__Content"><span class="Polaris-Button__Text">{0}</span></span></button></div>\n'.format(
-                action)
+        action_label = action.replace('_', ' ')
+        text += '<div class="Polaris-ButtonGroup__Item"><button type="button" class="Polaris-Button" onclick="command(\'{0}\')"><span class="Polaris-Button__Content"><span class="Polaris-Button__Text">{1}</span></span></button></div>\n'.format(
+            url, action_label)
 
     text += '</div>\n'
     text += '</div>\n'
@@ -163,30 +157,32 @@ def api_root():
 
     if is_logged_in():
         user_info = get_user_info()
-        is_admin = user_info['email'] in ADMIN_EMAILS
-        is_allowed_domain = user_info['email'].endswith(
-            app.config['ALLOWED_EMAIL_DOMAIN'])
 
-        channel_name = None
-        user_name = get_user_name(user_info['email'])
-        user_email = user_info['email']
+        if user_info['email'].endswith(app.config['ALLOWED_EMAIL_DOMAIN']):
+            channel_name = None
+            user_name = get_user_name(user_info['email'])
+            user_email = user_info['email']
 
-        try:
-            channel_name = find_channel_by_user_name(
-                room_id_map, CHANNELS, user_name)
-        except AssertionError as exception:
-            app.logger.warning(logger_message(user_email, exception))
+            try:
+                channel_name = find_channel_by_user_name(
+                    room_id_map, CHANNELS, user_name)
+            except AssertionError as exception:
+                app.logger.warning(logger_message(user_email, exception))
+                text += '<div class="Polaris-Card__Section">\n'
+                text += '<p class="error">{0}</p>\n'.format(str(exception))
+                text += '</div>\n'
+
+            text += render_user_card_section(user_email, ('Channel list', '/blinds'))
+
+            if not channel_name is None:
+                channel = app.config['CHANNELS'][channel_name]
+                text += render_channel_card_section(
+                    channel_name, channel)
+        else:
             text += '<div class="Polaris-Card__Section">\n'
-            text += '<p class="error">{0}</p>\n'.format(str(exception))
+            text += '<p class="error">Only {0} domain is supported</p>\n'.format(
+                app.config['ALLOWED_EMAIL_DOMAIN'])
             text += '</div>\n'
-
-        text += render_user_card_section(is_allowed_domain,
-                                         is_admin, user_email, ('Channel list', '/blinds'))
-
-        if not channel_name is None:
-            channel = app.config['CHANNELS'][channel_name]
-            text += render_channel_card_section(
-                channel_name, channel, is_admin, is_allowed_domain)
 
     else:
         text += '<div class="Polaris-Card__Section">\n'
@@ -202,9 +198,10 @@ def api_blinds_main():
         return flask.redirect(flask.url_for('api_root'), code=302)
 
     user_info = get_user_info()
-    is_admin = user_info['email'] in app.config['ADMIN_EMAILS']
-    is_allowed_domain = user_info['email'].endswith(
-        app.config['ALLOWED_EMAIL_DOMAIN'])
+
+    if not user_info['email'].endswith(app.config['ALLOWED_EMAIL_DOMAIN']):
+        return flask.redirect('/', code=302)
+
     user_email = user_info['email']
 
     text = ''
@@ -212,12 +209,10 @@ def api_blinds_main():
     text += '<h2 class="Polaris-Heading">Channel list</h2>\n'
     text += '</div>\n'
 
-    text += render_user_card_section(is_allowed_domain,
-                                     is_admin, user_email, ('Main', '/'))
+    text += render_user_card_section(user_email, ('Main', '/'))
 
     for key, channel in sorted(CHANNELS.items()):
-        text += render_channel_card_section(key, channel,
-                                            is_admin, is_allowed_domain)
+        text += render_channel_card_section(key, channel)
 
     return flask.render_template("blinds.html", channels_html=text)
 
@@ -228,14 +223,11 @@ def api_blinds_ajax_control(action):
         return 'Not authorised!', 403
 
     user_info = get_user_info()
-    is_admin = user_info['email'] in ADMIN_EMAILS
-    is_allowed_domain = user_info['email'].endswith(
-        app.config['ALLOWED_EMAIL_DOMAIN'])
 
     user_email = user_info['email']
     user_name = get_user_name(user_info['email'])
 
-    if not is_admin and not is_allowed_domain:
+    if not user_info['email'].endswith(app.config['ALLOWED_EMAIL_DOMAIN']):
         return 'Not authorised!', 403
 
     channel_name = flask.request.args.get('channel_name')

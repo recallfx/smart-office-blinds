@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from .actions import Actions
 from .processor import Processor
+
 
 class SmartBlinds():
     def __init__(self, channels, debug_mode=False):
@@ -16,14 +16,7 @@ class SmartBlinds():
             self.processors[key].start()
 
     def command(self, action, channel_name=None):
-        if action == Actions.OPEN:
-            self.processors[channel_name].queue.put('open')
-
-        if action == Actions.CLOSE:
-            self.processors[channel_name].queue.put('close')
-
-        if action == Actions.STOP:
-            self.processors[channel_name].queue.put('stop')
+        self.processors[channel_name].queue.put(action)
 
     def join_processors(self):
         for _, processor in self.processors.items():

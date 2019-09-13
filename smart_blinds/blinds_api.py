@@ -1,12 +1,22 @@
 # -*- coding: utf-8 -*-
 
 import time
+
 import pigpio
+
 from .actions import Actions
+
+MAX_TOGGLE_COUNT = 7
+OPEN_TIME_TO_30_PERCENT = 20
+CLOSE_TIME_TO_30_PERCENT = 40
+TIME_TO_FULL_CLOSE_OPEN = 60
+
 
 class BlindsApi():
     state = Actions.IDLE
     previous_state = None
+    toggle_times = 0
+    toggle_direction_up = False
 
     def __init__(self, channel, debug_mode):
         self.channel = channel
@@ -34,7 +44,8 @@ class BlindsApi():
         if not self.debug_mode:
             self.pigpio_pi.set_servo_pulsewidth(self.servo_pin, angle)
         else:
-            print('[debug] Set angle "{0}" on servo_pin "{1}"'.format(angle, self.servo_pin))
+            print('[debug] Set angle "{0}" on servo_pin "{1}"'.format(
+                angle, self.servo_pin))
 
         time.sleep(0.2)
 
@@ -62,6 +73,8 @@ class BlindsApi():
 
         angle = self.channel['action_open']['angle']
         sleep = self.channel['action_open']['sleep']
+        self.toggle_times = 0
+        self.toggle_direction_up = False
 
         self._command(Actions.OPEN, angle, sleep)
 
@@ -71,6 +84,8 @@ class BlindsApi():
 
         angle = self.channel['action_close']['angle']
         sleep = self.channel['action_close']['sleep']
+        self.toggle_times = 0
+        self.toggle_direction_up = True
 
         self._command(Actions.CLOSE, angle, sleep)
 
@@ -79,12 +94,46 @@ class BlindsApi():
             return
 
         if self.previous_state == Actions.CLOSE:
-            print('action_open')
             angle = self.channel['action_open']['angle']
         elif self.previous_state == Actions.OPEN:
-            print('action_close')
             angle = self.channel['action_close']['angle']
         else:
             angle = self.channel['action_open']['angle']
 
         self._command(Actions.STOP, angle, 0.2)
+
+    def open_30_percent(self):
+        if self.state != Actions.IDLE:
+            return
+
+        if self.previous_state == Actions.CLOSE:
+            self.open()
+            time.sleep(OPEN_TIME_TO_30_PERCENT)
+            self.stop()
+        elif self.previous_state == Actions.OPEN:
+            self.close()
+            time.sleep(CLOSE_TIME_TO_30_PERCENT)
+            self.stop()
+        else:
+            self.close()
+            time.sleep(TIME_TO_FULL_CLOSE_OPEN)
+            self.open()
+            time.sleep(OPEN_TIME_TO_30_PERCENT)
+            self.stop()
+
+    def position_toggle(self):
+        if self.state != Actions.IDLE:
+            return
+
+        if (self.toggle_times >= MAX_TOGGLE_COUNT - 1):
+            self.toggle_times = 0
+            self.toggle_direction_up = not self.toggle_direction_up
+        else:
+            self.toggle_times += 1
+
+        if self.toggle_direction_up:
+            angle = self.channel['action_open']['angle']
+        else:
+            angle = self.channel['action_close']['angle']
+
+        self._command(Actions.POSITION_TOGGLE, angle, 0.2)

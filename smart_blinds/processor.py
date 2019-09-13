@@ -18,6 +18,10 @@ class Processor(Process):
             while True:
                 command = self.queue.get()
 
+                if command == Actions.OPEN_30_PERCENT:
+                    self.blinds.open_30_percent()
+                if command == Actions.POSITION_TOGGLE:
+                    self.blinds.position_toggle()
                 if command == Actions.OPEN:
                     self.blinds.open()
                 if command == Actions.CLOSE:
