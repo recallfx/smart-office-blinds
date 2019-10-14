@@ -239,9 +239,6 @@ def api_blinds_ajax_control(action):
         app.logger.info(logger_message(
             user_email, 'action: {0} channel: {1}'.format(action, channel_name)))
 
-        channel_name = find_channel_by_user_name(
-            room_id_map, CHANNELS, user_name)
-
         message = validate_command(CHANNELS, action, channel_name)
         smart_blinds.command(action, channel_name)
     except AssertionError as exception:
