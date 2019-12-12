@@ -98,4 +98,38 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
   }
 });
 
+// [START trigger]
+exports.setAlexaCommand = functions.https.onCall(async (data, context) => {
+  // [END trigger]
+
+  // verify Firebase Auth ID token
+  if (!data.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+    // [START sendError]
+    return { message: 'Authentication Required!', code: 401 };
+    // [END sendError]
+  }
+
+  // [START readQueryParams]
+  const email = data.email;
+  const channel = data.channel;
+  const action = data.action;
+  // [END readQueryParams]
+
+  try {
+    // [START adminSdkAdd]
+    const writeResult = await saveCommand(channel, action, email);
+    // [END adminSdkAdd]
+
+    // [START sendResponse]
+    return { message: 'ok', code: 200 };
+    // [END sendResponse]
+  } catch (error) {
+    // [START sendErrorResponse]
+    console.log(error);
+
+    return { message: error, code: 500 };
+    // [END sendErrorResponse]      
+  }
+});
+
 // [END all]
