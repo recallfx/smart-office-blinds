@@ -4,6 +4,7 @@ import instance.config as config
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
+from smart_blinds.smart_blinds import SmartBlinds
 
 
 class Collections():
@@ -68,13 +69,16 @@ def init_firestore(db, channels):
         except Exception as inst:
             print(u'Something went wrong: ', inst)
 
-def on_command_snapshot(col_snapshot, changes, read_time):
+def on_command_snapshot(docs, changes, read_time):
     for change in changes:
         if change.type.name == 'ADDED':
-            print(u'New: {}'.format(change.document.id))
+            print(u'New: {} {} {} {}'.format(change.document.id, change.document.get('channel'), change.document.get('action'), change.document.get('email')))
 
             # send this to blinds api
 
+# Set up
+DEBUG = True
+smart_blinds = SmartBlinds(config.CHANNELS, DEBUG)
 
 # Use a service account
 script_dir = os.path.dirname(__file__)
@@ -88,10 +92,10 @@ db = firestore.client()
 init_firestore(db, config.CHANNELS)
 
 
-col_ref = db.collection(Collections.COMMANDS)
-doc_ref = col_ref.order_by(
+colection_ref = db.collection(Collections.COMMANDS)
+query_ref = colection_ref.order_by(
     Fields.TIMESTAMP, direction=firestore.Query.DESCENDING).limit(1)
-doc_watch = doc_ref.on_snapshot(on_command_snapshot)
+doc_watch = query_ref.on_snapshot(on_command_snapshot)
 
 while (1):
     pass
