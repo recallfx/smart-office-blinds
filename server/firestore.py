@@ -72,10 +72,10 @@ def init_firestore(db, channels):
 def on_command_snapshot(docs, changes, read_time):
     for change in changes:
         if change.type.name == 'ADDED':
-            print(u'New: {} {} {} {}'.format(change.document.id, change.document.get('channel'), change.document.get('action'), change.document.get('email')))
-            smart_blinds.command(change.document.get('action'), change.document.get('channel'))
+            run_command(change.document)
 
-            # send this to blinds api
+def run_command(document):
+    smart_blinds.command(document.get('action'), document.get('channel'))
 
 # Set up
 DEBUG = True
