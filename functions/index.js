@@ -102,34 +102,38 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
 exports.setAlexaCommand = functions.https.onCall(async (data, context) => {
   // [END trigger]
 
-  // verify Firebase Auth ID token
-  if (!data.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
-    // [START sendError]
-    return { message: 'Authentication Required!', code: 401 };
-    // [END sendError]
-  }
+  // [START usingMiddleware]
+  // Enable CORS using the `cors` express middleware.
+  return cors(req, res, async () => {
+    // [END usingMiddleware]
 
-  // [START readQueryParams]
-  const email = data.email;
-  const channel = data.channel;
-  const action = data.action;
-  // [END readQueryParams]
+    // verify Firebase Auth ID token
+    if (!req.query.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+      // [START sendError]
+      res.status(401).json({ message: 'Authentication Required!', code: 401 });
+      // [END sendError]
+    } else {
+      // [START readQueryParam]
+      const channel = req.query.channel;
+      const action = req.query.action;
+      const email = req.query.email || '';
+      // [END readQueryParam]
 
-  try {
-    // [START adminSdkAdd]
-    const writeResult = await saveCommand(channel, action, email);
-    // [END adminSdkAdd]
+      try {
+        // [START adminSdkAdd]
+        const writeResult = await saveCommand(channel, action, email);
+        // [END adminSdkAdd]
 
-    // [START sendResponse]
-    return { message: 'ok', code: 200 };
-    // [END sendResponse]
-  } catch (error) {
-    // [START sendErrorResponse]
-    console.log(error);
-
-    return { message: error, code: 500 };
-    // [END sendErrorResponse]      
-  }
+        // [START sendResponse]
+        res.status(200).json({ message: 'ok' });
+        // [END sendResponse]
+      } catch (error) {
+        // [START sendErrorResponse]
+        res.status(500).json({ message: error });
+        // [END sendErrorResponse]
+      }
+    }
+  });
 });
 
 // [END all]
