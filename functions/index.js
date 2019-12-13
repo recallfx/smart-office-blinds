@@ -64,43 +64,30 @@ exports.command = functions.https.onRequest((req, res) => {
 
 // [START trigger]
 exports.setChannelStatus = functions.https.onRequest((req, res) => {
-  // [END trigger]
-
-  // [START usingMiddleware]
-  // Enable CORS using the `cors` express middleware.
   return cors(req, res, async () => {
-    // [END usingMiddleware]
+    // if (req.body.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+    //   return res.status(401).json({message:'Authentication Required!'});
+    // }
 
-    // [START readQueryParam]
-    const channel = req.query.channel;
-    const status = req.query.status;
-    const action = req.query.action || null;
-    // [END readQueryParam]
+    const { channel, status, action = null } = req.query;
 
     try {
       const channelDocRef = admin.firestore().collection('channels').doc(channel);
+      const doc = await channelDocRef.get();
 
-      channelDocRef.get()
-        .then(doc => {
-          const writeResult = channelDocRef.set(
-            {
-              status: status
-            },
-            {
-              merge: true
-            }
-          );
+      let params = {
+        status: status
+      }
 
-          res.json({ writeResult });
-        })
-        .catch(err => {
+      if (action !== null) {
+        params.last_action = action;
+      }
 
-        });
+      const writeResult = await channelDocRef.set(params, { merge: true });
 
-    } catch (error) {
-      // [START sendErrorResponse]
-      res.json({ writeResult: null });
-      // [END sendErrorResponse]
+      return res.status(200).json({ writeResult });
+    } catch (err) {
+      return res.status(400).json({messge: 'Internal Error', err});
     }
   });
 });
