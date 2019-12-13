@@ -87,7 +87,7 @@ exports.setChannelStatus = functions.https.onRequest((req, res) => {
 
       return res.status(200).json({ writeResult });
     } catch (err) {
-      return res.status(400).json({messge: 'Internal Error', err});
+      return res.status(400).json({message: 'Internal Error', err});
     }
   });
 });
