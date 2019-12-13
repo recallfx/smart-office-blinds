@@ -57,7 +57,50 @@ exports.command = functions.https.onRequest((req, res) => {
     } catch (error) {
       // [START sendErrorResponse]
       res.json({ commands, writeResult: null });
-      // [END sendErrorResponse]      
+      // [END sendErrorResponse]
+    }
+  });
+});
+
+// [START trigger]
+exports.setChannelStatus = functions.https.onRequest((req, res) => {
+  // [END trigger]
+
+  // [START usingMiddleware]
+  // Enable CORS using the `cors` express middleware.
+  return cors(req, res, async () => {
+    // [END usingMiddleware]
+
+    // [START readQueryParam]
+    const channel = req.query.channel;
+    const status = req.query.status;
+    const action = req.query.action || null;
+    // [END readQueryParam]
+
+    try {
+      const channelDocRef = admin.firestore().collection('channels').doc(channel);
+
+      channelDocRef.get()
+        .then(doc => {
+          const writeResult = channelDocRef.set(
+            {
+              status: status
+            },
+            {
+              merge: true
+            }
+          );
+
+          res.json({ writeResult });
+        })
+        .catch(err => {
+
+        });
+
+    } catch (error) {
+      // [START sendErrorResponse]
+      res.json({ writeResult: null });
+      // [END sendErrorResponse]
     }
   });
 });
@@ -94,7 +137,7 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
     console.log(error);
 
     return { message: error, code: 500 };
-    // [END sendErrorResponse]      
+    // [END sendErrorResponse]
   }
 });
 

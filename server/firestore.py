@@ -2,6 +2,7 @@ import os
 import datetime
 import instance.config as config
 import firebase_admin
+import requests
 from firebase_admin import credentials
 from firebase_admin import firestore
 from smart_blinds.smart_blinds import SmartBlinds
@@ -78,6 +79,8 @@ def run_command(document):
     smart_blinds.command(document.get('action'), document.get('channel'))
 
 # Set up
+# response = requests.get('https://us-central1-sob-mbieliau-firebase-2d798.cloudfunctions.net/command', params={'channel': 'ABC', 'action': 'DEF'})
+# print(response.text)
 DEBUG = True
 smart_blinds = SmartBlinds(config.CHANNELS, DEBUG)
 
