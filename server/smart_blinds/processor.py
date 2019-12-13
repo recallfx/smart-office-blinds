@@ -20,13 +20,19 @@ class Processor(Process):
 
                 if command == Actions.OPEN_30_PERCENT:
                     if self.blinds.can_open_partly():
+                        self.update_channel_status('busy', command)
                         self.blinds.open_30_percent()
+                        self.update_channel_status('idle')
                 if command == Actions.POSITION_TOGGLE:
                     if self.blinds.can_toggle_position():
+                        self.update_channel_status('busy', command)
                         self.blinds.position_toggle()
+                        self.update_channel_status('idle')
                 if command == Actions.OPEN:
                     if self.blinds.can_open():
+                        self.update_channel_status('busy', command)
                         self.blinds.open()
+                        self.update_channel_status('idle')
                 if command == Actions.CLOSE:
                     if self.blinds.can_close():
                         self.update_channel_status('busy', command)
@@ -34,7 +40,9 @@ class Processor(Process):
                         self.update_channel_status('idle')
                 if command == Actions.STOP:
                     if self.blinds.can_stop():
+                        self.update_channel_status('busy', command)
                         self.blinds.stop()
+                        self.update_channel_status('idle')
         except KeyboardInterrupt:
             pass
 
