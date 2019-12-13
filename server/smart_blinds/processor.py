@@ -29,9 +29,19 @@ class Processor(Process):
                         self.blinds.open()
                 if command == Actions.CLOSE:
                     if self.blinds.can_close():
+                        self.update_channel_status('busy', command)
                         self.blinds.close()
+                        self.update_channel_status('idle')
                 if command == Actions.STOP:
                     if self.blinds.can_stop():
                         self.blinds.stop()
         except KeyboardInterrupt:
             pass
+
+    def update_channel_status(status, action = None):
+        data = {'channel': self.blinds.channel, 'status': status}
+
+        if (action is not None):
+            data.update({'action': action})
+
+        response = requests.get('https://us-central1-sob-mbieliau-firebase-2d798.cloudfunctions.net/setChannelStatus', params=data)
