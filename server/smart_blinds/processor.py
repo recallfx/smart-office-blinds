@@ -54,3 +54,5 @@ class Processor(Process):
             data.update({'action': action})
 
         response = requests.get('https://us-central1-sob-mbieliau-firebase-2d798.cloudfunctions.net/setChannelStatus', params=data)
+
+        print('[debug] Update status: {} {} {} {}'.format(self.blinds.channel, status, action, response))
