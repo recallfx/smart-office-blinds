@@ -4,7 +4,7 @@ import requests
 from multiprocessing import Process, Queue
 
 from .actions import Actions
-from .channel)statuses import ChannelStatuses
+from .channel_statuses import ChannelStatuses
 from .blinds_api import BlindsApi
 
 
