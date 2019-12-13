@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import requests
 from multiprocessing import Process, Queue
 
 from .actions import Actions
