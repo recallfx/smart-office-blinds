@@ -14,6 +14,7 @@ class Processor(Process):
         self.kwargs = kwargs
         self.blinds = BlindsApi(channel, debug_mode)
         self.channel_name = channel_name
+        self.debug_mode = debug_mode
 
     def run(self):
         try:
@@ -56,4 +57,5 @@ class Processor(Process):
 
         response = requests.get('https://us-central1-sob-mbieliau-firebase-2d798.cloudfunctions.net/setChannelStatus', params=data)
 
-        print('[debug] Update status: {} {} {} {}'.format(self.channel_name, status, action, response))
+        if self.debug_mode:
+            print('[debug] Update channel status. Channel: {}, status: {}, action: {}, response: {}'.format(self.channel_name, status, action, response.text))
