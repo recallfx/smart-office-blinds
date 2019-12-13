@@ -19,14 +19,19 @@ class Processor(Process):
                 command = self.queue.get()
 
                 if command == Actions.OPEN_30_PERCENT:
-                    self.blinds.open_30_percent()
+                    if self.blinds.can_open_partly():
+                        self.blinds.open_30_percent()
                 if command == Actions.POSITION_TOGGLE:
-                    self.blinds.position_toggle()
+                    if self.blinds.can_toggle_position():
+                        self.blinds.position_toggle()
                 if command == Actions.OPEN:
-                    self.blinds.open()
+                    if self.blinds.can_open():
+                        self.blinds.open()
                 if command == Actions.CLOSE:
-                    self.blinds.close()
+                    if self.blinds.can_close():
+                        self.blinds.close()
                 if command == Actions.STOP:
-                    self.blinds.stop()
+                    if self.blinds.can_stop():
+                        self.blinds.stop()
         except KeyboardInterrupt:
             pass
