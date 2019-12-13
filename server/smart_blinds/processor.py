@@ -4,6 +4,7 @@ import requests
 from multiprocessing import Process, Queue
 
 from .actions import Actions
+from .channel)statuses import ChannelStatuses
 from .blinds_api import BlindsApi
 
 
@@ -23,29 +24,29 @@ class Processor(Process):
 
                 if command == Actions.OPEN_30_PERCENT:
                     if self.blinds.can_open_partly():
-                        self.update_channel_status('busy', command)
+                        self.update_channel_status(ChannelStatuses.BUSY, command)
                         self.blinds.open_30_percent()
-                        self.update_channel_status('idle')
+                        self.update_channel_status(ChannelStatuses.IDLE)
                 if command == Actions.POSITION_TOGGLE:
                     if self.blinds.can_toggle_position():
-                        self.update_channel_status('busy', command)
+                        self.update_channel_status(ChannelStatuses.BUSY, command)
                         self.blinds.position_toggle()
-                        self.update_channel_status('idle')
+                        self.update_channel_status(ChannelStatuses.IDLE)
                 if command == Actions.OPEN:
                     if self.blinds.can_open():
-                        self.update_channel_status('busy', command)
+                        self.update_channel_status(ChannelStatuses.BUSY, command)
                         self.blinds.open()
-                        self.update_channel_status('idle')
+                        self.update_channel_status(ChannelStatuses.IDLE)
                 if command == Actions.CLOSE:
                     if self.blinds.can_close():
-                        self.update_channel_status('busy', command)
+                        self.update_channel_status(ChannelStatuses.BUSY, command)
                         self.blinds.close()
-                        self.update_channel_status('idle')
+                        self.update_channel_status(ChannelStatuses.IDLE)
                 if command == Actions.STOP:
                     if self.blinds.can_stop():
-                        self.update_channel_status('busy', command)
+                        self.update_channel_status(ChannelStatuses.BUSY, command)
                         self.blinds.stop()
-                        self.update_channel_status('idle')
+                        self.update_channel_status(ChannelStatuses.IDLE)
         except KeyboardInterrupt:
             pass
 
