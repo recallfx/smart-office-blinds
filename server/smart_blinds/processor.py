@@ -8,11 +8,12 @@ from .blinds_api import BlindsApi
 
 
 class Processor(Process):
-    def __init__(self, channel, debug_mode, **kwargs):
+    def __init__(self, channel, channel_name, debug_mode, **kwargs):
         super(Processor, self).__init__()
         self.queue = Queue(1)
         self.kwargs = kwargs
         self.blinds = BlindsApi(channel, debug_mode)
+        self.channel_name = channel_name
 
     def run(self):
         try:
@@ -48,11 +49,11 @@ class Processor(Process):
             pass
 
     def update_channel_status(self, status, action = None):
-        data = {'channel': self.blinds.channel, 'status': status}
+        data = {'channel': self.channel_name, 'status': status}
 
         if (action is not None):
             data.update({'action': action})
 
         response = requests.get('https://us-central1-sob-mbieliau-firebase-2d798.cloudfunctions.net/setChannelStatus', params=data)
 
-        print('[debug] Update status: {} {} {} {}'.format(self.blinds.channel, status, action, response))
+        print('[debug] Update status: {} {} {} {}'.format(self.channel_name, status, action, response))
