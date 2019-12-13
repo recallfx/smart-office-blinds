@@ -67,7 +67,7 @@ class BlindsApi():
 
         self._command(Actions.IDLE, angle, sleep)
 
-    def can_open():
+    def can_open(self):
         if self.state != Actions.IDLE or self.previous_state == Actions.OPEN:
             return False
 
@@ -84,7 +84,7 @@ class BlindsApi():
 
         self._command(Actions.OPEN, angle, sleep)
 
-    def can_close():
+    def can_close(self):
         if self.state != Actions.IDLE or self.previous_state == Actions.CLOSE:
             return False
 
@@ -101,7 +101,7 @@ class BlindsApi():
 
         self._command(Actions.CLOSE, angle, sleep)
 
-    def can_stop():
+    def can_stop(self):
         if self.state != Actions.IDLE:
             return False
 
@@ -120,7 +120,7 @@ class BlindsApi():
 
         self._command(Actions.STOP, angle, 0.2)
 
-    def can_open_partly():
+    def can_open_partly(self):
         if self.state != Actions.IDLE:
             return False
 
@@ -148,7 +148,7 @@ class BlindsApi():
         for _ in range(PARTIAL_OPEN_TIMES):
             self.position_toggle()
 
-    def can_toggle_position():
+    def can_toggle_position(self):
         if self.state != Actions.IDLE:
             return False
 

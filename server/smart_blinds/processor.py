@@ -38,7 +38,7 @@ class Processor(Process):
         except KeyboardInterrupt:
             pass
 
-    def update_channel_status(status, action = None):
+    def update_channel_status(self, status, action = None):
         data = {'channel': self.blinds.channel, 'status': status}
 
         if (action is not None):
