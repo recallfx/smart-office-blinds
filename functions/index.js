@@ -98,41 +98,21 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
   }
 });
 
-// [START trigger]
-exports.setAlexaCommand = functions.https.onCall(async (data, context) => {
-  // [END trigger]
-
-  // [START usingMiddleware]
-  // Enable CORS using the `cors` express middleware.
+exports.setAlexaCommand = functions.https.onRequest((req, res) => {
   return cors(req, res, async () => {
-    // [END usingMiddleware]
-
-    // verify Firebase Auth ID token
-    if (!req.query.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
-      // [START sendError]
-      res.status(401).json({ message: 'Authentication Required!', code: 401 });
-      // [END sendError]
-    } else {
-      // [START readQueryParam]
-      const channel = req.query.channel;
-      const action = req.query.action;
-      const email = req.query.email || '';
-      // [END readQueryParam]
-
-      try {
-        // [START adminSdkAdd]
-        const writeResult = await saveCommand(channel, action, email);
-        // [END adminSdkAdd]
-
-        // [START sendResponse]
-        res.status(200).json({ message: 'ok' });
-        // [END sendResponse]
-      } catch (error) {
-        // [START sendErrorResponse]
-        res.status(500).json({ message: error });
-        // [END sendErrorResponse]
-      }
+    if (req.body.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+      return res.status(401).json({message:'Authentication Required!'});
     }
+
+    const { email, action, channel } = req.body;
+
+    try {
+      const writeResult = await saveCommand(channel, action, email);
+    } catch (err) {
+      return res.status(400).json({messge: 'Internal Error', err});
+    }
+
+    return res.status(200).json({messge: 'ok'});
   });
 });
 

@@ -68,3 +68,4 @@ node_modules/
 .DS_Store
 
 server/instance/*
+client/_site/assets/script.js
