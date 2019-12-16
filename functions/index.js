@@ -60,7 +60,7 @@ exports.command = functions.https.onRequest((req, res) => {
     } catch (error) {
       // [START sendErrorResponse]
       res.json({ commands, writeResult: null });
-      // [END sendErrorResponse]      
+      // [END sendErrorResponse]
     }
   });
 });
@@ -99,6 +99,24 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
     return { message: error, code: 500 };
     // [END sendErrorResponse]
   }
+});
+
+exports.setAlexaCommand = functions.https.onRequest((req, res) => {
+  return cors(req, res, async () => {
+    if (req.body.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+      return res.status(401).json({message:'Authentication Required!'});
+    }
+
+    const { email, action, channel } = req.body;
+
+    try {
+      const writeResult = await saveCommand(channel, action, email);
+    } catch (err) {
+      return res.status(400).json({messge: 'Internal Error', err});
+    }
+
+    return res.status(200).json({messge: 'ok'});
+  });
 });
 
 exports.refreshSeating = functions.https.onCall(async (data, context) => {
