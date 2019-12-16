@@ -1,6 +1,6 @@
 'use strict';
 
-const NODE_ENV = "undefined";
+const NODE_ENV = "development";
 
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
@@ -599,7 +599,6 @@ function implementsAnyMethods(obj, methods) {
 function noop() {
     // do nothing
 }
-//# sourceMappingURL=index.esm.js.map
 
 /**
  * Component for service name T, e.g. `auth`, `auth-internal`
@@ -901,7 +900,6 @@ var ComponentContainer = /** @class */ (function () {
     };
     return ComponentContainer;
 }());
-//# sourceMappingURL=index.esm.js.map
 
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
@@ -1073,7 +1071,6 @@ var Logger = /** @class */ (function () {
     };
     return Logger;
 }());
-//# sourceMappingURL=index.esm.js.map
 
 /**
  * @license
@@ -1576,7 +1573,6 @@ firebase.initializeApp = function () {
     return initializeApp.apply(undefined, args);
 };
 var firebase$1 = firebase;
-//# sourceMappingURL=index.esm.js.map
 
 (function() {var k,aa="function"==typeof Object.defineProperties?Object.defineProperty:function(a,b,c){a!=Array.prototype&&a!=Object.prototype&&(a[b]=c.value);},ba="undefined"!=typeof window&&window===this?this:"undefined"!=typeof global&&null!=global?global:this;function ca(a,b){if(b){var c=ba;a=a.split(".");for(var d=0;d<a.length-1;d++){var e=a[d];e in c||(c[e]={});c=c[e];}a=a[a.length-1];d=c[a];b=b(d);b!=d&&null!=b&&aa(c,a,{configurable:!0,writable:!0,value:b});}}
 function da(a){var b=0;return function(){return b<a.length?{done:!1,value:a[b++]}:{done:!0}}}function ea(a){var b="undefined"!=typeof Symbol&&Symbol.iterator&&a[Symbol.iterator];return b?b.call(a):{next:da(a)}}
@@ -1914,8 +1910,6 @@ Y(Og.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Y(M.prototype,{toJSON:{name:"
 wg,[V("providerId")]);Z(a,"PhoneAuthProvider",Tg,[Dn()]);Z(a,"RecaptchaVerifier",wn,[X(V(),Cn(),"recaptchaContainer"),W("recaptchaParameters",!0),En()]);Z(a,"ActionCodeURL",qf,[]);firebase$1.INTERNAL.registerComponent({name:"auth",instanceFactory:function(b){b=b.getProvider("app").getImmediate();return new Km(b)},multipleInstances:!1,serviceProps:a,instantiationMode:"LAZY",type:"PUBLIC"});firebase$1.INTERNAL.registerComponent({name:"auth-internal",instanceFactory:function(b){b=b.getProvider("auth").getImmediate();
 return {getUid:t(b.getUid,b),getToken:t(b.cc,b),addAuthTokenListener:t(b.Wb,b),removeAuthTokenListener:t(b.Ec,b)}},multipleInstances:!1,instantiationMode:"LAZY",type:"PRIVATE"});firebase$1.INTERNAL.extendNamespace({User:Q});}else throw Error("Cannot find the firebase namespace; be sure to include firebase-app.js before this library.");})();}).apply(typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {});
 
-//# sourceMappingURL=auth.esm.js.map
-
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
 var g,goog=goog||{},k=commonjsGlobal;function m(a){return "string"==typeof a}function aa(a){return "number"==typeof a}function n(a,b){a=a.split(".");b=b||k;for(var c=0;c<a.length;c++)if(b=b[a[c]],null==b)return null;return b}function ba(){}
@@ -2010,7 +2004,6 @@ var tmp_2 = tmp.ErrorCode;
 var tmp_3 = tmp.EventType;
 var tmp_4 = tmp.WebChannel;
 var tmp_5 = tmp.XhrIo;
-//# sourceMappingURL=index.esm.js.map
 
 /**
  * @license
@@ -25387,7 +25380,6 @@ function registerFirestore(instance) {
     configureForFirebase(instance);
 }
 registerFirestore(firebase$1);
-//# sourceMappingURL=index.esm.js.map
 
 /**
  * @license
@@ -26006,7 +25998,6 @@ function registerFunctions(instance) {
  * limitations under the License.
  */
 registerFunctions(firebase$1);
-//# sourceMappingURL=index.esm.js.map
 
 /*!
  * Vue.js v2.6.10
@@ -38171,7 +38162,6 @@ function addStyle(id, css) {
         }
     }
 }
-//# sourceMappingURL=index.mjs.map
 
 /* script */
 const __vue_script__ = script;
