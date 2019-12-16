@@ -68,3 +68,9 @@ node_modules/
 .DS_Store
 
 server/instance/*
+
+.idea/
+
+__pycache__/
+
+functions/config.js

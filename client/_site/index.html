@@ -10,13 +10,14 @@
   </head>
   <body>
     <div id="app">
-      <app 
+      <app
         :firebase-loaded="firebaseLoaded"
         :initialising="initialising"
         :allowed-domain="allowedDomain"
         :error-message="errorMessage"
         :user="user"
         :channels="channels"
+        :user-channel="userChannel"
         :commands="commands" />
     </div>
     <script src="./assets/script.js"></script>

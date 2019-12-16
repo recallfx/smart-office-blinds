@@ -4,6 +4,9 @@ const functions = require('firebase-functions');
 // [START additionalimports]
 // The Firebase Admin SDK to access the Cloud Firestore.
 const admin = require('firebase-admin');
+const axios = require('axios');
+const seatingHelper = require('./seatingHelper');
+const config = require('./config');
 
 // CORS Express middleware to enable CORS Requests.
 const cors = require('cors')({
@@ -94,8 +97,59 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
     console.log(error);
 
     return { message: error, code: 500 };
-    // [END sendErrorResponse]      
+    // [END sendErrorResponse]
   }
 });
 
+exports.refreshSeating = functions.https.onCall(async (data, context) => {
+  const seats = await axios("https://shopify.officespacesoftware.com/api/1/seats?floor_id=63", {
+    method: 'GET',
+    headers:{
+      'Content-Type': 'application/json',
+      'authorization': `Token token="${config.officeSpaceAPIToken}"`,
+    }
+  });
+
+  const occupiedSeatsMappedOnPod = seats.data.response.map(seat => {
+    seat.channel = seatingHelper.detectPod(seat.coordinates);
+    return seat;
+  });
+
+  const promises = occupiedSeatsMappedOnPod
+    .filter(seat => seat && seat.occupancy && seat.occupancy.employee_url)
+    .map((seat) => {
+      return axios("https://shopify.officespacesoftware.com" + seat.occupancy.employee_url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Token token="${config.officeSpaceAPIToken}"`,
+        }
+      })
+        .then(employee => {
+          seat.email = employee.data.response.email;
+          return seat;
+        })
+        .catch((err) => {
+          console.log(err.response.statusText, seat.id);
+        });
+    });
+
+  Promise.all(promises)
+    .then(responses => {
+    // Some seats have employee url, but there is no employee for that and on request we get 404. Then error is thrown and undefined is returned.
+    admin.firestore()
+      .collection('employees')
+      .doc('vilnius')
+      .set({
+        seats: responses.filter(r => typeof r !== 'undefined'),
+      })
+      .catch(err => console.log(err));
+
+    return 1;
+  })
+    .catch((err) => {
+      console.log(err);
+    });
+
+});
 // [END all]

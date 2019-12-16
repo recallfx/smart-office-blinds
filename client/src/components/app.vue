@@ -24,12 +24,15 @@
         <template v-if="!initialising">
           <error-banner title="Wrong domain" :error="wrongDomainError" />
 
-          <user-section 
+          <user-section
             :email="userEmail"
             :is-logged-in="isLoggedIn"
-            :has-correct-domain="hasCorrectDomain" />
-
-            <channels v-if="isLoggedIn" :channels="channels" :has-correct-domain="hasCorrectDomain" :commands="commands" />
+            :filter="filter"
+            :has-correct-domain="hasCorrectDomain"
+            @updateFilter="updateFilter"
+            :user-channel="userChannel"
+          />
+          <channels v-if="isLoggedIn" :channels="channelsToShow" :has-correct-domain="hasCorrectDomain" :commands="commands" />
         </template>
       </div>
     </div>
@@ -40,23 +43,47 @@
 import UserSection from './user-section.vue';
 import Channels from './channels.vue';
 import ErrorBanner from './error-banner.vue';
+import { filterAll, filterMy } from "../constants";
 
 export default {
+  props: {
+      initialising: Boolean,
+      allowedDomain: String,
+      firebaseLoaded: Boolean,
+      errorMessage: Error,
+      user: Object,
+      channels: Array,
+      commands: Array,
+      userChannel: String,
+  },
+  data() {
+      return {
+          filter: filterAll,
+      };
+  },
   components: {
     UserSection,
     Channels,
     ErrorBanner,
   },
-  props: {
-    initialising: Boolean,
-    allowedDomain: String,
-    firebaseLoaded: Boolean,
-    errorMessage: Error,
-    user: Object,
-    channels: Array,
-    commands: Array,
+  methods: {
+    updateFilter(value) {
+      this.$set(this, 'filter', value);
+    },
+  },
+  watch: {
+    userChannel: function(newChannel) {
+        this.$set(this, 'filter', newChannel === 'no_channel'? filterAll : filterMy )
+    },
   },
   computed: {
+    channelsToShow() {
+        if (this.filter === filterMy) {
+            return this.channels.filter(c => c.name === this.userChannel);
+        }
+
+        return this.channels;
+    },
     isLoggedIn() {
       return this.user !== null;
     },

@@ -79,6 +79,34 @@ function __generator(thisArg, body) {
     }
 }
 
+function __values(o) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator], i = 0;
+    if (m) return m.call(o);
+    return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+}
+
+function __read(o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+}
+
 function __spreadArrays() {
     for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
     for (var r = Array(s), k = 0, i = 0; i < il; i++)
@@ -152,6 +180,64 @@ function deepExtend(target, source) {
     }
     return target;
 }
+
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var Deferred = /** @class */ (function () {
+    function Deferred() {
+        var _this = this;
+        this.reject = function () { };
+        this.resolve = function () { };
+        this.promise = new Promise(function (resolve, reject) {
+            _this.resolve = resolve;
+            _this.reject = reject;
+        });
+    }
+    /**
+     * Our API internals are not promiseified and cannot because our callback APIs have subtle expectations around
+     * invoking promises inline, which Promises are forbidden to do. This method accepts an optional node-style callback
+     * and returns a node-style callback which will resolve or reject the Deferred's promise.
+     */
+    Deferred.prototype.wrapCallback = function (callback) {
+        var _this = this;
+        return function (error, value) {
+            if (error) {
+                _this.reject(error);
+            }
+            else {
+                _this.resolve(value);
+            }
+            if (typeof callback === 'function') {
+                // Attaching noop handler just in case developer wasn't expecting
+                // promises
+                _this.promise.catch(function () { });
+                // Some of our callbacks don't expect a value and our own tests
+                // assert that the parameter length is 1
+                if (callback.length === 1) {
+                    callback(error);
+                }
+                else {
+                    callback(error, value);
+                }
+            }
+        };
+    };
+    return Deferred;
+}());
 
 /**
  * @license
@@ -515,6 +601,308 @@ function noop() {
 }
 //# sourceMappingURL=index.esm.js.map
 
+/**
+ * Component for service name T, e.g. `auth`, `auth-internal`
+ */
+var Component = /** @class */ (function () {
+    /**
+     *
+     * @param name The public service name, e.g. app, auth, firestore, database
+     * @param instanceFactory Service factory responsible for creating the public interface
+     * @param type whehter the service provided by the component is public or private
+     */
+    function Component(name, instanceFactory, type) {
+        this.name = name;
+        this.instanceFactory = instanceFactory;
+        this.type = type;
+        this.multipleInstances = false;
+        /**
+         * Properties to be added to the service namespace
+         */
+        this.serviceProps = {};
+        this.instantiationMode = "LAZY" /* LAZY */;
+    }
+    Component.prototype.setInstantiationMode = function (mode) {
+        this.instantiationMode = mode;
+        return this;
+    };
+    Component.prototype.setMultipleInstances = function (multipleInstances) {
+        this.multipleInstances = multipleInstances;
+        return this;
+    };
+    Component.prototype.setServiceProps = function (props) {
+        this.serviceProps = props;
+        return this;
+    };
+    return Component;
+}());
+
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var DEFAULT_ENTRY_NAME = '[DEFAULT]';
+
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Provider for instance for service name T, e.g. 'auth', 'auth-internal'
+ * NameServiceMapping[T] is an alias for the type of the instance
+ */
+var Provider = /** @class */ (function () {
+    function Provider(name, container) {
+        this.name = name;
+        this.container = container;
+        this.component = null;
+        this.instances = new Map();
+        this.instancesDeferred = new Map();
+    }
+    /**
+     * @param identifier A provider can provide mulitple instances of a service
+     * if this.component.multipleInstances is true.
+     */
+    Provider.prototype.get = function (identifier) {
+        if (identifier === void 0) { identifier = DEFAULT_ENTRY_NAME; }
+        // if multipleInstances is not supported, use the default name
+        var normalizedIdentifier = this.normalizeInstanceIdentifier(identifier);
+        if (!this.instancesDeferred.has(normalizedIdentifier)) {
+            var deferred = new Deferred();
+            this.instancesDeferred.set(normalizedIdentifier, deferred);
+            // If the service instance is available, resolve the promise with it immediately
+            try {
+                var instance = this.getOrInitializeService(normalizedIdentifier);
+                if (instance) {
+                    deferred.resolve(instance);
+                }
+            }
+            catch (e) {
+                // when the instance factory throws an exception during get(), it should not cause
+                // a fatal error. We just return the unresolved promise in this case.
+            }
+        }
+        return this.instancesDeferred.get(normalizedIdentifier).promise;
+    };
+    Provider.prototype.getImmediate = function (options) {
+        var _a = __assign({ identifier: DEFAULT_ENTRY_NAME, optional: false }, options), identifier = _a.identifier, optional = _a.optional;
+        // if multipleInstances is not supported, use the default name
+        var normalizedIdentifier = this.normalizeInstanceIdentifier(identifier);
+        try {
+            var instance = this.getOrInitializeService(normalizedIdentifier);
+            if (!instance) {
+                if (optional) {
+                    return null;
+                }
+                throw Error("Service " + this.name + " is not available");
+            }
+            return instance;
+        }
+        catch (e) {
+            if (optional) {
+                return null;
+            }
+            else {
+                throw e;
+            }
+        }
+    };
+    Provider.prototype.setComponent = function (component) {
+        var e_1, _a;
+        if (component.name !== this.name) {
+            throw Error("Mismatching Component " + component.name + " for Provider " + this.name + ".");
+        }
+        if (this.component) {
+            throw Error("Component for " + this.name + " has already been provided");
+        }
+        this.component = component;
+        // if the service is eager, initialize the default instance
+        if (isComponentEager(component)) {
+            try {
+                this.getOrInitializeService(DEFAULT_ENTRY_NAME);
+            }
+            catch (e) {
+                // when the instance factory for an eager Component throws an exception during the eager
+                // initialization, it should not cause a fatal error.
+                // TODO: Investigate if we need to make it configurable, because some component may want to cause
+                // a fatal error in this case?
+            }
+        }
+        try {
+            // Create service instances for the pending promises and resolve them
+            // NOTE: if this.multipleInstances is false, only the default instance will be created
+            // and all promises with resolve with it regardless of the identifier.
+            for (var _b = __values(this.instancesDeferred.entries()), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var _d = __read(_c.value, 2), instanceIdentifier = _d[0], instanceDeferred = _d[1];
+                var normalizedIdentifier = this.normalizeInstanceIdentifier(instanceIdentifier);
+                try {
+                    // `getOrInitializeService()` should always return a valid instance since a component is guaranteed. use ! to make typescript happy.
+                    var instance = this.getOrInitializeService(normalizedIdentifier);
+                    instanceDeferred.resolve(instance);
+                }
+                catch (e) {
+                    // when the instance factory throws an exception, it should not cause
+                    // a fatal error. We just leave the promise unresolved.
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+    };
+    Provider.prototype.clearInstance = function (identifier) {
+        if (identifier === void 0) { identifier = DEFAULT_ENTRY_NAME; }
+        this.instancesDeferred.delete(identifier);
+        this.instances.delete(identifier);
+    };
+    // app.delete() will call this method on every provider to delete the services
+    // TODO: should we mark the provider as deleted?
+    Provider.prototype.delete = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var services;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        services = Array.from(this.instances.values());
+                        return [4 /*yield*/, Promise.all(services
+                                .filter(function (service) { return 'INTERNAL' in service; })
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                .map(function (service) { return service.INTERNAL.delete(); }))];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Provider.prototype.isComponentSet = function () {
+        return this.component != null;
+    };
+    Provider.prototype.getOrInitializeService = function (identifier) {
+        var instance = this.instances.get(identifier);
+        if (!instance && this.component) {
+            instance = this.component.instanceFactory(this.container, normalizeIdentifierForFactory(identifier));
+            this.instances.set(identifier, instance);
+        }
+        return instance || null;
+    };
+    Provider.prototype.normalizeInstanceIdentifier = function (identifier) {
+        if (this.component) {
+            return this.component.multipleInstances ? identifier : DEFAULT_ENTRY_NAME;
+        }
+        else {
+            return identifier; // assume multiple instances are supported before the component is provided.
+        }
+    };
+    return Provider;
+}());
+// undefined should be passed to the service factory for the default instance
+function normalizeIdentifierForFactory(identifier) {
+    return identifier === DEFAULT_ENTRY_NAME ? undefined : identifier;
+}
+function isComponentEager(component) {
+    return component.instantiationMode === "EAGER" /* EAGER */;
+}
+
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * ComponentContainer that provides Providers for service name T, e.g. `auth`, `auth-internal`
+ */
+var ComponentContainer = /** @class */ (function () {
+    function ComponentContainer(name) {
+        this.name = name;
+        this.providers = new Map();
+    }
+    /**
+     *
+     * @param component Component being added
+     * @param overwrite When a component with the same name has already been registered,
+     * if overwrite is true: overwrite the existing component with the new component and create a new
+     * provider with the new component. It can be useful in tests where you want to use different mocks
+     * for different tests.
+     * if overwrite is false: throw an exception
+     */
+    ComponentContainer.prototype.addComponent = function (component) {
+        var provider = this.getProvider(component.name);
+        if (provider.isComponentSet()) {
+            throw new Error("Component " + component.name + " has already been registered with " + this.name);
+        }
+        provider.setComponent(component);
+    };
+    ComponentContainer.prototype.addOrOverwriteComponent = function (component) {
+        var provider = this.getProvider(component.name);
+        if (provider.isComponentSet()) {
+            // delete the existing provider from the container, so we can register the new component
+            this.providers.delete(component.name);
+        }
+        this.addComponent(component);
+    };
+    /**
+     * getProvider provides a type safe interface where it can only be called with a field name
+     * present in NameServiceMapping interface.
+     *
+     * Firebase SDKs providing services should extend NameServiceMapping interface to register
+     * themselves.
+     */
+    ComponentContainer.prototype.getProvider = function (name) {
+        if (this.providers.has(name)) {
+            return this.providers.get(name);
+        }
+        // create a Provider for a service that hasn't registered with Firebase
+        var provider = new Provider(name, this);
+        this.providers.set(name, provider);
+        return provider;
+    };
+    ComponentContainer.prototype.getProviders = function () {
+        return Array.from(this.providers.values());
+    };
+    return ComponentContainer;
+}());
+//# sourceMappingURL=index.esm.js.map
+
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -731,7 +1119,25 @@ var ERROR_FACTORY = new ErrorFactory('app', 'Firebase', ERRORS);
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var DEFAULT_ENTRY_NAME = '[DEFAULT]';
+var DEFAULT_ENTRY_NAME$1 = '[DEFAULT]';
+
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var logger = new Logger('@firebase/app');
 
 /**
  * @license
@@ -755,37 +1161,31 @@ var DEFAULT_ENTRY_NAME = '[DEFAULT]';
  */
 var FirebaseAppImpl = /** @class */ (function () {
     function FirebaseAppImpl(options, config, firebase_) {
+        var e_1, _a;
         var _this = this;
         this.firebase_ = firebase_;
         this.isDeleted_ = false;
-        this.services_ = {};
-        // An array to capture listeners before the true auth functions exist
-        this.tokenListeners_ = [];
-        // An array to capture requests to send events before analytics component loads. Use type any to make using function.apply easier
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.analyticsEventRequests_ = [];
         this.name_ = config.name;
         this.automaticDataCollectionEnabled_ =
             config.automaticDataCollectionEnabled || false;
         this.options_ = deepCopy(options);
-        var self = this;
-        this.INTERNAL = {
-            getUid: function () { return null; },
-            getToken: function () { return Promise.resolve(null); },
-            addAuthTokenListener: function (callback) {
-                _this.tokenListeners_.push(callback);
-                // Make sure callback is called, asynchronously, in the absence of the auth module
-                setTimeout(function () { return callback(null); }, 0);
-            },
-            removeAuthTokenListener: function (callback) {
-                _this.tokenListeners_ = _this.tokenListeners_.filter(function (listener) { return listener !== callback; });
-            },
-            analytics: {
-                logEvent: function () {
-                    self.analyticsEventRequests_.push(arguments);
-                }
+        this.container = new ComponentContainer(config.name);
+        // add itself to container
+        this._addComponent(new Component('app', function () { return _this; }, "PUBLIC" /* PUBLIC */));
+        try {
+            // populate ComponentContainer with existing components
+            for (var _b = __values(this.firebase_.INTERNAL.components.values()), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var component = _c.value;
+                this._addComponent(component);
             }
-        };
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
     }
     Object.defineProperty(FirebaseAppImpl.prototype, "automaticDataCollectionEnabled", {
         get: function () {
@@ -823,21 +1223,10 @@ var FirebaseAppImpl = /** @class */ (function () {
         })
             .then(function () {
             _this.firebase_.INTERNAL.removeApp(_this.name_);
-            var services = [];
-            for (var _i = 0, _a = Object.keys(_this.services_); _i < _a.length; _i++) {
-                var serviceKey = _a[_i];
-                for (var _b = 0, _c = Object.keys(_this.services_[serviceKey]); _b < _c.length; _b++) {
-                    var instanceKey = _c[_b];
-                    services.push(_this.services_[serviceKey][instanceKey]);
-                }
-            }
-            return Promise.all(services
-                .filter(function (service) { return 'INTERNAL' in service; })
-                .map(function (service) { return service.INTERNAL.delete(); }));
+            return Promise.all(_this.container.getProviders().map(function (provider) { return provider.delete(); }));
         })
             .then(function () {
             _this.isDeleted_ = true;
-            _this.services_ = {};
         });
     };
     /**
@@ -855,23 +1244,12 @@ var FirebaseAppImpl = /** @class */ (function () {
      * @internal
      */
     FirebaseAppImpl.prototype._getService = function (name, instanceIdentifier) {
-        if (instanceIdentifier === void 0) { instanceIdentifier = DEFAULT_ENTRY_NAME; }
+        if (instanceIdentifier === void 0) { instanceIdentifier = DEFAULT_ENTRY_NAME$1; }
         this.checkDestroyed_();
-        if (!this.services_[name]) {
-            this.services_[name] = {};
-        }
-        if (!this.services_[name][instanceIdentifier]) {
-            /**
-             * If a custom instance has been defined (i.e. not '[DEFAULT]')
-             * then we will pass that instance on, otherwise we pass `null`
-             */
-            var instanceSpecifier = instanceIdentifier !== DEFAULT_ENTRY_NAME
-                ? instanceIdentifier
-                : undefined;
-            var service = this.firebase_.INTERNAL.factories[name](this, this.extendApp.bind(this), instanceSpecifier);
-            this.services_[name][instanceIdentifier] = service;
-        }
-        return this.services_[name][instanceIdentifier];
+        // getImmediate will always succeed because _getService is only called for registered components.
+        return this.container.getProvider(name).getImmediate({
+            identifier: instanceIdentifier
+        });
     };
     /**
      * Remove a service instance from the cache, so we will create a new instance for this service
@@ -884,46 +1262,23 @@ var FirebaseAppImpl = /** @class */ (function () {
      * @internal
      */
     FirebaseAppImpl.prototype._removeServiceInstance = function (name, instanceIdentifier) {
-        if (instanceIdentifier === void 0) { instanceIdentifier = DEFAULT_ENTRY_NAME; }
-        if (this.services_[name] && this.services_[name][instanceIdentifier]) {
-            delete this.services_[name][instanceIdentifier];
-        }
+        if (instanceIdentifier === void 0) { instanceIdentifier = DEFAULT_ENTRY_NAME$1; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.container.getProvider(name).clearInstance(instanceIdentifier);
     };
     /**
-     * Callback function used to extend an App instance at the time
-     * of service instance creation.
+     * @param component the component being added to this app's container
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    FirebaseAppImpl.prototype.extendApp = function (props) {
-        // Copy the object onto the FirebaseAppImpl prototype
-        deepExtend(this, props);
-        if (props.INTERNAL) {
-            /**
-             * If the app has overwritten the addAuthTokenListener stub, forward
-             * the active token listeners on to the true fxn.
-             *
-             * TODO: This function is required due to our current module
-             * structure. Once we are able to rely strictly upon a single module
-             * implementation, this code should be refactored and Auth should
-             * provide these stubs and the upgrade logic
-             */
-            if (props.INTERNAL.addAuthTokenListener) {
-                for (var _i = 0, _a = this.tokenListeners_; _i < _a.length; _i++) {
-                    var listener = _a[_i];
-                    this.INTERNAL.addAuthTokenListener(listener);
-                }
-                this.tokenListeners_ = [];
-            }
-            if (props.INTERNAL.analytics) {
-                for (var _b = 0, _c = this.analyticsEventRequests_; _b < _c.length; _b++) {
-                    var request = _c[_b];
-                    // logEvent is the actual implementation at this point.
-                    // We forward the queued events to it.
-                    this.INTERNAL.analytics.logEvent.apply(undefined, request);
-                }
-                this.analyticsEventRequests_ = [];
-            }
+    FirebaseAppImpl.prototype._addComponent = function (component) {
+        try {
+            this.container.addComponent(component);
         }
+        catch (e) {
+            logger.debug("Component " + component.name + " failed to register with FirebaseApp " + this.name, e);
+        }
+    };
+    FirebaseAppImpl.prototype._addOrOverwriteComponent = function (component) {
+        this.container.addOrOverwriteComponent(component);
     };
     /**
      * This function will throw an Error if the App has already been deleted -
@@ -942,25 +1297,7 @@ var FirebaseAppImpl = /** @class */ (function () {
     FirebaseAppImpl.prototype.delete ||
     console.log('dc');
 
-var version = "7.2.3";
-
-/**
- * @license
- * Copyright 2019 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var logger = new Logger('@firebase/app');
+var version = "7.5.1";
 
 /**
  * @license
@@ -987,8 +1324,8 @@ var logger = new Logger('@firebase/app');
  */
 function createFirebaseNamespaceCore(firebaseAppImpl) {
     var apps = {};
-    var factories = {};
-    var appHooks = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    var components = new Map();
     // A namespace is a plain JavaScript Object.
     var namespace = {
         // Hack to prevent Babel from modifying the object returned
@@ -1002,9 +1339,9 @@ function createFirebaseNamespaceCore(firebaseAppImpl) {
         apps: null,
         SDK_VERSION: version,
         INTERNAL: {
-            registerService: registerService,
+            registerComponent: registerComponent,
             removeApp: removeApp,
-            factories: factories,
+            components: components,
             useAsService: useAsService
         }
     };
@@ -1029,15 +1366,13 @@ function createFirebaseNamespaceCore(firebaseAppImpl) {
      * are deleted.
      */
     function removeApp(name) {
-        var app = apps[name];
-        callAppHooks(app, 'delete');
         delete apps[name];
     }
     /**
      * Get the App object for a given name (or DEFAULT).
      */
     function app(name) {
-        name = name || DEFAULT_ENTRY_NAME;
+        name = name || DEFAULT_ENTRY_NAME$1;
         if (!contains(apps, name)) {
             throw ERROR_FACTORY.create("no-app" /* NO_APP */, { appName: name });
         }
@@ -1053,7 +1388,7 @@ function createFirebaseNamespaceCore(firebaseAppImpl) {
         }
         var config = rawConfig;
         if (config.name === undefined) {
-            config.name = DEFAULT_ENTRY_NAME;
+            config.name = DEFAULT_ENTRY_NAME$1;
         }
         var name = config.name;
         if (typeof name !== 'string' || !name) {
@@ -1066,7 +1401,6 @@ function createFirebaseNamespaceCore(firebaseAppImpl) {
         }
         var app = new firebaseAppImpl(options, config, namespace);
         apps[name] = app;
-        callAppHooks(app, 'create');
         return app;
     }
     /*
@@ -1076,81 +1410,73 @@ function createFirebaseNamespaceCore(firebaseAppImpl) {
         // Make a copy so caller cannot mutate the apps list.
         return Object.keys(apps).map(function (name) { return apps[name]; });
     }
-    /*
-     * Register a Firebase Service.
-     *
-     * firebase.INTERNAL.registerService()
-     *
-     * TODO: Implement serviceProperties.
-     */
-    function registerService(name, createService, serviceProperties, appHook, allowMultipleInstances) {
-        if (allowMultipleInstances === void 0) { allowMultipleInstances = false; }
-        // If re-registering a service that already exists, return existing service
-        if (factories[name]) {
-            logger.debug("There were multiple attempts to register service " + name + ".");
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return namespace[name];
+    function registerComponent(component) {
+        var e_1, _a;
+        var componentName = component.name;
+        if (components.has(componentName)) {
+            logger.debug("There were multiple attempts to register component " + componentName + ".");
+            return component.type === "PUBLIC" /* PUBLIC */
+                ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    namespace[componentName]
+                : null;
         }
-        // Capture the service factory for later service instantiation
-        factories[name] = createService;
-        // Capture the appHook, if passed
-        if (appHook) {
-            appHooks[name] = appHook;
-            // Run the **new** app hook on all existing apps
-            getApps().forEach(function (app) {
-                appHook('create', app);
-            });
-        }
-        // The Service namespace is an accessor function ...
-        function serviceNamespace(appArg) {
-            if (appArg === void 0) { appArg = app(); }
-            // @ts-ignore
-            if (typeof appArg[name] !== 'function') {
-                // Invalid argument.
-                // This happens in the following case: firebase.storage('gs:/')
-                throw ERROR_FACTORY.create("invalid-app-argument" /* INVALID_APP_ARGUMENT */, {
-                    appName: name
-                });
-            }
-            // Forward service instance lookup to the FirebaseApp.
-            // @ts-ignore
-            return appArg[name]();
-        }
-        // ... and a container for service-level properties.
-        if (serviceProperties !== undefined) {
-            deepExtend(serviceNamespace, serviceProperties);
-        }
-        // Monkey-patch the serviceNamespace onto the firebase namespace
-        // @ts-ignore
-        namespace[name] = serviceNamespace;
-        // Patch the FirebaseAppImpl prototype
-        // @ts-ignore
-        firebaseAppImpl.prototype[name] =
-            // TODO: The eslint disable can be removed and the 'ignoreRestArgs'
-            // option added to the no-explicit-any rule when ESlint releases it.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            function () {
-                var args = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    args[_i] = arguments[_i];
+        components.set(componentName, component);
+        // create service namespace for public components
+        if (component.type === "PUBLIC" /* PUBLIC */) {
+            // The Service namespace is an accessor function ...
+            var serviceNamespace = function (appArg) {
+                if (appArg === void 0) { appArg = app(); }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                if (typeof appArg[componentName] !== 'function') {
+                    // Invalid argument.
+                    // This happens in the following case: firebase.storage('gs:/')
+                    throw ERROR_FACTORY.create("invalid-app-argument" /* INVALID_APP_ARGUMENT */, {
+                        appName: componentName
+                    });
                 }
-                var serviceFxn = this._getService.bind(this, name);
-                return serviceFxn.apply(this, allowMultipleInstances ? args : []);
+                // Forward service instance lookup to the FirebaseApp.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                return appArg[componentName]();
             };
-        return serviceNamespace;
-    }
-    function callAppHooks(app, eventName) {
-        for (var _i = 0, _a = Object.keys(factories); _i < _a.length; _i++) {
-            var serviceName = _a[_i];
-            // Ignore virtual services
-            var factoryName = useAsService(app, serviceName);
-            if (factoryName === null) {
-                return;
+            // ... and a container for service-level properties.
+            if (component.serviceProps !== undefined) {
+                deepExtend(serviceNamespace, component.serviceProps);
             }
-            if (appHooks[factoryName]) {
-                appHooks[factoryName](eventName, app);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            namespace[componentName] = serviceNamespace;
+            // Patch the FirebaseAppImpl prototype
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            firebaseAppImpl.prototype[componentName] =
+                // TODO: The eslint disable can be removed and the 'ignoreRestArgs'
+                // option added to the no-explicit-any rule when ESlint releases it.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                function () {
+                    var args = [];
+                    for (var _i = 0; _i < arguments.length; _i++) {
+                        args[_i] = arguments[_i];
+                    }
+                    var serviceFxn = this._getService.bind(this, componentName);
+                    return serviceFxn.apply(this, component.multipleInstances ? args : []);
+                };
+        }
+        try {
+            // add the component to existing app instances
+            for (var _b = __values(Object.keys(apps)), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var appName = _c.value;
+                apps[appName]._addComponent(component);
             }
         }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return component.type === "PUBLIC" /* PUBLIC */
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                namespace[componentName]
+            : null;
     }
     // Map the requested service to a registered service name
     // (used to map auth to serverAuth service when needed).
@@ -1204,6 +1530,7 @@ function createFirebaseNamespace() {
     }
     return namespace;
 }
+var firebase = createFirebaseNamespace();
 
 /**
  * @license
@@ -1231,12 +1558,11 @@ if (isBrowser() && self.firebase !== undefined) {
         logger.warn("\n    Warning: You are trying to load Firebase while using Firebase Performance standalone script.\n    You should load Firebase Performance with this instance of Firebase to avoid loading duplicate code.\n    ");
     }
 }
-var firebaseNamespace = createFirebaseNamespace();
-var initializeApp = firebaseNamespace.initializeApp;
+var initializeApp = firebase.initializeApp;
 // TODO: This disable can be removed and the 'ignoreRestArgs' option added to
 // the no-explicit-any rule when ESlint releases it.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-firebaseNamespace.initializeApp = function () {
+firebase.initializeApp = function () {
     var args = [];
     for (var _i = 0; _i < arguments.length; _i++) {
         args[_i] = arguments[_i];
@@ -1249,7 +1575,7 @@ firebaseNamespace.initializeApp = function () {
     }
     return initializeApp.apply(undefined, args);
 };
-var firebase = firebaseNamespace;
+var firebase$1 = firebase;
 //# sourceMappingURL=index.esm.js.map
 
 (function() {var k,aa="function"==typeof Object.defineProperties?Object.defineProperty:function(a,b,c){a!=Array.prototype&&a!=Object.prototype&&(a[b]=c.value);},ba="undefined"!=typeof window&&window===this?this:"undefined"!=typeof global&&null!=global?global:this;function ca(a,b){if(b){var c=ba;a=a.split(".");for(var d=0;d<a.length-1;d++){var e=a[d];e in c||(c[e]={});c=c[e];}a=a[a.length-1];d=c[a];b=b(d);b!=d&&null!=b&&aa(c,a,{configurable:!0,writable:!0,value:b});}}
@@ -1257,13 +1583,13 @@ function da(a){var b=0;return function(){return b<a.length?{done:!1,value:a[b++]
 ca("Promise",function(a){function b(g){this.b=0;this.c=void 0;this.a=[];var h=this.f();try{g(h.resolve,h.reject);}catch(m){h.reject(m);}}function c(){this.a=null;}function d(g){return g instanceof b?g:new b(function(h){h(g);})}if(a)return a;c.prototype.b=function(g){if(null==this.a){this.a=[];var h=this;this.c(function(){h.g();});}this.a.push(g);};var e=ba.setTimeout;c.prototype.c=function(g){e(g,0);};c.prototype.g=function(){for(;this.a&&this.a.length;){var g=this.a;this.a=[];for(var h=0;h<g.length;++h){var m=
 g[h];g[h]=null;try{m();}catch(p){this.f(p);}}}this.a=null;};c.prototype.f=function(g){this.c(function(){throw g;});};b.prototype.f=function(){function g(p){return function(u){m||(m=!0,p.call(h,u));}}var h=this,m=!1;return {resolve:g(this.m),reject:g(this.g)}};b.prototype.m=function(g){if(g===this)this.g(new TypeError("A Promise cannot resolve to itself"));else if(g instanceof b)this.o(g);else{a:switch(typeof g){case "object":var h=null!=g;break a;case "function":h=!0;break a;default:h=!1;}h?this.u(g):this.h(g);}};
 b.prototype.u=function(g){var h=void 0;try{h=g.then;}catch(m){this.g(m);return}"function"==typeof h?this.v(h,g):this.h(g);};b.prototype.g=function(g){this.i(2,g);};b.prototype.h=function(g){this.i(1,g);};b.prototype.i=function(g,h){if(0!=this.b)throw Error("Cannot settle("+g+", "+h+"): Promise already settled in state"+this.b);this.b=g;this.c=h;this.l();};b.prototype.l=function(){if(null!=this.a){for(var g=0;g<this.a.length;++g)f.b(this.a[g]);this.a=null;}};var f=new c;b.prototype.o=function(g){var h=this.f();
-g.Ja(h.resolve,h.reject);};b.prototype.v=function(g,h){var m=this.f();try{g.call(h,m.resolve,m.reject);}catch(p){m.reject(p);}};b.prototype.then=function(g,h){function m(C,N){return "function"==typeof C?function(wa){try{p(C(wa));}catch(ld){u(ld);}}:N}var p,u,A=new b(function(C,N){p=C;u=N;});this.Ja(m(g,p),m(h,u));return A};b.prototype.catch=function(g){return this.then(void 0,g)};b.prototype.Ja=function(g,h){function m(){switch(p.b){case 1:g(p.c);break;case 2:h(p.c);break;default:throw Error("Unexpected state: "+
-p.b);}}var p=this;null==this.a?f.b(m):this.a.push(m);};b.resolve=d;b.reject=function(g){return new b(function(h,m){m(g);})};b.race=function(g){return new b(function(h,m){for(var p=ea(g),u=p.next();!u.done;u=p.next())d(u.value).Ja(h,m);})};b.all=function(g){var h=ea(g),m=h.next();return m.done?d([]):new b(function(p,u){function A(wa){return function(ld){C[wa]=ld;N--;0==N&&p(C);}}var C=[],N=0;do C.push(void 0),N++,d(m.value).Ja(A(C.length-1),u),m=h.next();while(!m.done)})};return b});
+g.La(h.resolve,h.reject);};b.prototype.v=function(g,h){var m=this.f();try{g.call(h,m.resolve,m.reject);}catch(p){m.reject(p);}};b.prototype.then=function(g,h){function m(C,N){return "function"==typeof C?function(wa){try{p(C(wa));}catch(ld){u(ld);}}:N}var p,u,A=new b(function(C,N){p=C;u=N;});this.La(m(g,p),m(h,u));return A};b.prototype.catch=function(g){return this.then(void 0,g)};b.prototype.La=function(g,h){function m(){switch(p.b){case 1:g(p.c);break;case 2:h(p.c);break;default:throw Error("Unexpected state: "+
+p.b);}}var p=this;null==this.a?f.b(m):this.a.push(m);};b.resolve=d;b.reject=function(g){return new b(function(h,m){m(g);})};b.race=function(g){return new b(function(h,m){for(var p=ea(g),u=p.next();!u.done;u=p.next())d(u.value).La(h,m);})};b.all=function(g){var h=ea(g),m=h.next();return m.done?d([]):new b(function(p,u){function A(wa){return function(ld){C[wa]=ld;N--;0==N&&p(C);}}var C=[],N=0;do C.push(void 0),N++,d(m.value).La(A(C.length-1),u),m=h.next();while(!m.done)})};return b});
 var fa=fa||{},l=this||self;function n(a){return "string"==typeof a}function ha(a){return "boolean"==typeof a}var ia=/^[\w+/_-]+[=]{0,2}$/,ja=null;function ka(){}
 function la(a){var b=typeof a;if("object"==b)if(a){if(a instanceof Array)return "array";if(a instanceof Object)return b;var c=Object.prototype.toString.call(a);if("[object Window]"==c)return "object";if("[object Array]"==c||"number"==typeof a.length&&"undefined"!=typeof a.splice&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("splice"))return "array";if("[object Function]"==c||"undefined"!=typeof a.call&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("call"))return "function"}else return "null";
 else if("function"==b&&"undefined"==typeof a.call)return "object";return b}function ma(a){return null===a}function na(a){return "array"==la(a)}function oa(a){var b=la(a);return "array"==b||"object"==b&&"number"==typeof a.length}function q(a){return "function"==la(a)}function r(a){var b=typeof a;return "object"==b&&null!=a||"function"==b}var pa="closure_uid_"+(1E9*Math.random()>>>0),qa=0;function ra(a,b,c){return a.call.apply(a.bind,arguments)}
 function sa(a,b,c){if(!a)throw Error();if(2<arguments.length){var d=Array.prototype.slice.call(arguments,2);return function(){var e=Array.prototype.slice.call(arguments);Array.prototype.unshift.apply(e,d);return a.apply(b,e)}}return function(){return a.apply(b,arguments)}}function t(a,b,c){Function.prototype.bind&&-1!=Function.prototype.bind.toString().indexOf("native code")?t=ra:t=sa;return t.apply(null,arguments)}
-function ta(a,b){var c=Array.prototype.slice.call(arguments,1);return function(){var d=c.slice();d.push.apply(d,arguments);return a.apply(this,d)}}var ua=Date.now||function(){return +new Date};function v(a,b){function c(){}c.prototype=b.prototype;a.qb=b.prototype;a.prototype=new c;a.prototype.constructor=a;a.fd=function(d,e,f){for(var g=Array(arguments.length-2),h=2;h<arguments.length;h++)g[h-2]=arguments[h];return b.prototype[e].apply(d,g)};}function va(a){if(!a)return !1;try{return !!a.$goog_Thenable}catch(b){return !1}}function w(a){if(Error.captureStackTrace)Error.captureStackTrace(this,w);else{var b=Error().stack;b&&(this.stack=b);}a&&(this.message=String(a));}v(w,Error);w.prototype.name="CustomError";function xa(a,b){a=a.split("%s");for(var c="",d=a.length-1,e=0;e<d;e++)c+=a[e]+(e<b.length?b[e]:"%s");w.call(this,c+a[d]);}v(xa,w);xa.prototype.name="AssertionError";function ya(a,b){throw new xa("Failure"+(a?": "+a:""),Array.prototype.slice.call(arguments,1));}function za(a,b){this.c=a;this.f=b;this.b=0;this.a=null;}za.prototype.get=function(){if(0<this.b){this.b--;var a=this.a;this.a=a.next;a.next=null;}else a=this.c();return a};function Aa(a,b){a.f(b);100>a.b&&(a.b++,b.next=a.a,a.a=b);}function Ba(){this.b=this.a=null;}var Da=new za(function(){return new Ca},function(a){a.reset();});Ba.prototype.add=function(a,b){var c=Da.get();c.set(a,b);this.b?this.b.next=c:this.a=c;this.b=c;};function Ea(){var a=Fa,b=null;a.a&&(b=a.a,a.a=a.a.next,a.a||(a.b=null),b.next=null);return b}function Ca(){this.next=this.b=this.a=null;}Ca.prototype.set=function(a,b){this.a=a;this.b=b;this.next=null;};Ca.prototype.reset=function(){this.next=this.b=this.a=null;};function Ga(a,b){a:{try{var c=a&&a.ownerDocument,d=c&&(c.defaultView||c.parentWindow);d=d||l;if(d.Element&&d.Location){var e=d;break a}}catch(g){}e=null;}if(e&&"undefined"!=typeof e[b]&&(!a||!(a instanceof e[b])&&(a instanceof e.Location||a instanceof e.Element))){if(r(a))try{var f=a.constructor.displayName||a.constructor.name||Object.prototype.toString.call(a);}catch(g){f="<object could not be stringified>";}else f=void 0===a?"undefined":null===a?"null":typeof a;ya("Argument is not a %s (or a non-Element, non-Location mock); got: %s",
+function ta(a,b){var c=Array.prototype.slice.call(arguments,1);return function(){var d=c.slice();d.push.apply(d,arguments);return a.apply(this,d)}}var ua=Date.now||function(){return +new Date};function v(a,b){function c(){}c.prototype=b.prototype;a.qb=b.prototype;a.prototype=new c;a.prototype.constructor=a;a.gd=function(d,e,f){for(var g=Array(arguments.length-2),h=2;h<arguments.length;h++)g[h-2]=arguments[h];return b.prototype[e].apply(d,g)};}function va(a){if(!a)return !1;try{return !!a.$goog_Thenable}catch(b){return !1}}function w(a){if(Error.captureStackTrace)Error.captureStackTrace(this,w);else{var b=Error().stack;b&&(this.stack=b);}a&&(this.message=String(a));}v(w,Error);w.prototype.name="CustomError";function xa(a,b){a=a.split("%s");for(var c="",d=a.length-1,e=0;e<d;e++)c+=a[e]+(e<b.length?b[e]:"%s");w.call(this,c+a[d]);}v(xa,w);xa.prototype.name="AssertionError";function ya(a,b){throw new xa("Failure"+(a?": "+a:""),Array.prototype.slice.call(arguments,1));}function za(a,b){this.c=a;this.f=b;this.b=0;this.a=null;}za.prototype.get=function(){if(0<this.b){this.b--;var a=this.a;this.a=a.next;a.next=null;}else a=this.c();return a};function Aa(a,b){a.f(b);100>a.b&&(a.b++,b.next=a.a,a.a=b);}function Ba(){this.b=this.a=null;}var Da=new za(function(){return new Ca},function(a){a.reset();});Ba.prototype.add=function(a,b){var c=Da.get();c.set(a,b);this.b?this.b.next=c:this.a=c;this.b=c;};function Ea(){var a=Fa,b=null;a.a&&(b=a.a,a.a=a.a.next,a.a||(a.b=null),b.next=null);return b}function Ca(){this.next=this.b=this.a=null;}Ca.prototype.set=function(a,b){this.a=a;this.b=b;this.next=null;};Ca.prototype.reset=function(){this.next=this.b=this.a=null;};function Ga(a,b){a:{try{var c=a&&a.ownerDocument,d=c&&(c.defaultView||c.parentWindow);d=d||l;if(d.Element&&d.Location){var e=d;break a}}catch(g){}e=null;}if(e&&"undefined"!=typeof e[b]&&(!a||!(a instanceof e[b])&&(a instanceof e.Location||a instanceof e.Element))){if(r(a))try{var f=a.constructor.displayName||a.constructor.name||Object.prototype.toString.call(a);}catch(g){f="<object could not be stringified>";}else f=void 0===a?"undefined":null===a?"null":typeof a;ya("Argument is not a %s (or a non-Element, non-Location mock); got: %s",
 b,f);}}var Ha=Array.prototype.indexOf?function(a,b){return Array.prototype.indexOf.call(a,b,void 0)}:function(a,b){if(n(a))return n(b)&&1==b.length?a.indexOf(b,0):-1;for(var c=0;c<a.length;c++)if(c in a&&a[c]===b)return c;return -1},x=Array.prototype.forEach?function(a,b,c){Array.prototype.forEach.call(a,b,c);}:function(a,b,c){for(var d=a.length,e=n(a)?a.split(""):a,f=0;f<d;f++)f in e&&b.call(c,e[f],f,a);};function Ia(a,b){for(var c=n(a)?a.split(""):a,d=a.length-1;0<=d;--d)d in c&&b.call(void 0,c[d],d,a);}
 var Ja=Array.prototype.map?function(a,b){return Array.prototype.map.call(a,b,void 0)}:function(a,b){for(var c=a.length,d=Array(c),e=n(a)?a.split(""):a,f=0;f<c;f++)f in e&&(d[f]=b.call(void 0,e[f],f,a));return d},Ka=Array.prototype.some?function(a,b){return Array.prototype.some.call(a,b,void 0)}:function(a,b){for(var c=a.length,d=n(a)?a.split(""):a,e=0;e<c;e++)if(e in d&&b.call(void 0,d[e],e,a))return !0;return !1};
 function La(a){a:{var b=Ma;for(var c=a.length,d=n(a)?a.split(""):a,e=0;e<c;e++)if(e in d&&b.call(void 0,d[e],e,a)){b=e;break a}b=-1;}return 0>b?null:n(a)?a.charAt(b):a[b]}function Na(a,b){return 0<=Ha(a,b)}function Oa(a,b){b=Ha(a,b);var c;(c=0<=b)&&Array.prototype.splice.call(a,b,1);return c}function Pa(a,b){var c=0;Ia(a,function(d,e){b.call(void 0,d,e,a)&&1==Array.prototype.splice.call(a,e,1).length&&c++;});}function Qa(a){return Array.prototype.concat.apply([],arguments)}
@@ -1280,22 +1606,22 @@ k.cancel=function(a){this.a==Rb&&Mb(function(){var b=new Ub(a);ec(this,b);},this
 function cc(a,b,c,d){var e=Yb(null,null,null);e.a=new B(function(f,g){e.g=b?function(h){try{var m=b.call(d,h);f(m);}catch(p){g(p);}}:f;e.b=c?function(h){try{var m=c.call(d,h);void 0===m&&h instanceof Ub?g(h):f(m);}catch(p){g(p);}}:g;});e.a.c=a;dc(a,e);return e.a}k.Oc=function(a){this.a=Rb;Sb(this,Tb,a);};k.Pc=function(a){this.a=Rb;Sb(this,Vb,a);};
 function Sb(a,b,c){a.a==Rb&&(a===c&&(b=Vb,c=new TypeError("Promise cannot resolve to itself")),a.a=1,$b(c,a.Oc,a.Pc,a)||(a.i=c,a.a=b,a.c=null,hc(a),b!=Vb||c instanceof Ub||ic(a,c)));}function $b(a,b,c,d){if(a instanceof B)return dc(a,Yb(b||ka,c||null,d)),!0;if(va(a))return a.then(b,c,d),!0;if(r(a))try{var e=a.then;if(q(e))return jc(a,e,b,c,d),!0}catch(f){return c.call(d,f),!0}return !1}
 function jc(a,b,c,d,e){function f(m){h||(h=!0,d.call(e,m));}function g(m){h||(h=!0,c.call(e,m));}var h=!1;try{b.call(a,g,f);}catch(m){f(m);}}function hc(a){a.h||(a.h=!0,Mb(a.Zb,a));}function fc(a){var b=null;a.b&&(b=a.b,a.b=b.next,b.next=null);a.b||(a.f=null);return b}k.Zb=function(){for(var a;a=fc(this);)gc(this,a,this.a,this.i);this.h=!1;};
-function gc(a,b,c,d){if(c==Vb&&b.b&&!b.c)for(;a&&a.g;a=a.c)a.g=!1;if(b.a)b.a.c=null,kc(b,c,d);else try{b.c?b.g.call(b.f):kc(b,c,d);}catch(e){lc.call(null,e);}Aa(Xb,b);}function kc(a,b,c){b==Tb?a.g.call(a.f,c):a.b&&a.b.call(a.f,c);}function ic(a,b){a.g=!0;Mb(function(){a.g&&lc.call(null,b);});}var lc=Jb;function Ub(a){w.call(this,a);}v(Ub,w);Ub.prototype.name="cancel";function mc(){this.ta=this.ta;this.la=this.la;}var nc=0;mc.prototype.ta=!1;function pc(a){if(!a.ta&&(a.ta=!0,a.xa(),0!=nc)){var b=a[pa]||(a[pa]=++qa);}}mc.prototype.xa=function(){if(this.la)for(;this.la.length;)this.la.shift()();};function qc(a){qc[" "](a);return a}qc[" "]=ka;function rc(a,b){var c=sc;return Object.prototype.hasOwnProperty.call(c,a)?c[a]:c[a]=b(a)}var tc=z("Opera"),uc=z("Trident")||z("MSIE"),vc=z("Edge"),wc=vc||uc,xc=z("Gecko")&&!(y(xb.toLowerCase(),"webkit")&&!z("Edge"))&&!(z("Trident")||z("MSIE"))&&!z("Edge"),yc=y(xb.toLowerCase(),"webkit")&&!z("Edge");function zc(){var a=l.document;return a?a.documentMode:void 0}var Ac;
+function gc(a,b,c,d){if(c==Vb&&b.b&&!b.c)for(;a&&a.g;a=a.c)a.g=!1;if(b.a)b.a.c=null,kc(b,c,d);else try{b.c?b.g.call(b.f):kc(b,c,d);}catch(e){lc.call(null,e);}Aa(Xb,b);}function kc(a,b,c){b==Tb?a.g.call(a.f,c):a.b&&a.b.call(a.f,c);}function ic(a,b){a.g=!0;Mb(function(){a.g&&lc.call(null,b);});}var lc=Jb;function Ub(a){w.call(this,a);}v(Ub,w);Ub.prototype.name="cancel";function mc(){this.va=this.va;this.la=this.la;}var nc=0;mc.prototype.va=!1;function pc(a){if(!a.va&&(a.va=!0,a.za(),0!=nc)){var b=a[pa]||(a[pa]=++qa);}}mc.prototype.za=function(){if(this.la)for(;this.la.length;)this.la.shift()();};function qc(a){qc[" "](a);return a}qc[" "]=ka;function rc(a,b){var c=sc;return Object.prototype.hasOwnProperty.call(c,a)?c[a]:c[a]=b(a)}var tc=z("Opera"),uc=z("Trident")||z("MSIE"),vc=z("Edge"),wc=vc||uc,xc=z("Gecko")&&!(y(xb.toLowerCase(),"webkit")&&!z("Edge"))&&!(z("Trident")||z("MSIE"))&&!z("Edge"),yc=y(xb.toLowerCase(),"webkit")&&!z("Edge");function zc(){var a=l.document;return a?a.documentMode:void 0}var Ac;
 a:{var Bc="",Cc=function(){var a=xb;if(xc)return /rv:([^\);]+)(\)|;)/.exec(a);if(vc)return /Edge\/([\d\.]+)/.exec(a);if(uc)return /\b(?:MSIE|rv)[: ]([^\);]+)(\)|;)/.exec(a);if(yc)return /WebKit\/(\S+)/.exec(a);if(tc)return /(?:Version)[ \/]?(\S+)/.exec(a)}();Cc&&(Bc=Cc?Cc[1]:"");if(uc){var Dc=zc();if(null!=Dc&&Dc>parseFloat(Bc)){Ac=String(Dc);break a}}Ac=Bc;}var sc={};
 function Ec(a){return rc(a,function(){for(var b=0,c=ib(String(Ac)).split("."),d=ib(String(a)).split("."),e=Math.max(c.length,d.length),f=0;0==b&&f<e;f++){var g=c[f]||"",h=d[f]||"";do{g=/(\d*)(\D*)(.*)/.exec(g)||["","","",""];h=/(\d*)(\D*)(.*)/.exec(h)||["","","",""];if(0==g[0].length&&0==h[0].length)break;b=qb(0==g[1].length?0:parseInt(g[1],10),0==h[1].length?0:parseInt(h[1],10))||qb(0==g[2].length,0==h[2].length)||qb(g[2],h[2]);g=g[3];h=h[3];}while(0==b)}return 0<=b})}var Fc;
 Fc=l.document&&uc?zc():void 0;var Gc=Object.freeze||function(a){return a};var Hc=!uc||9<=Number(Fc),Ic=uc&&!Ec("9"),Jc=function(){if(!l.addEventListener||!Object.defineProperty)return !1;var a=!1,b=Object.defineProperty({},"passive",{get:function(){a=!0;}});try{l.addEventListener("test",ka,b),l.removeEventListener("test",ka,b);}catch(c){}return a}();function F(a,b){this.type=a;this.b=this.target=b;this.Mb=!0;}F.prototype.preventDefault=function(){this.Mb=!1;};function Kc(a,b){F.call(this,a?a.type:"");this.relatedTarget=this.b=this.target=null;this.button=this.screenY=this.screenX=this.clientY=this.clientX=0;this.key="";this.metaKey=this.shiftKey=this.altKey=this.ctrlKey=!1;this.pointerId=0;this.pointerType="";this.a=null;if(a){var c=this.type=a.type,d=a.changedTouches&&a.changedTouches.length?a.changedTouches[0]:null;this.target=a.target||a.srcElement;this.b=b;if(b=a.relatedTarget){if(xc){a:{try{qc(b.nodeName);var e=!0;break a}catch(f){}e=!1;}e||(b=null);}}else"mouseover"==
 c?b=a.fromElement:"mouseout"==c&&(b=a.toElement);this.relatedTarget=b;d?(this.clientX=void 0!==d.clientX?d.clientX:d.pageX,this.clientY=void 0!==d.clientY?d.clientY:d.pageY,this.screenX=d.screenX||0,this.screenY=d.screenY||0):(this.clientX=void 0!==a.clientX?a.clientX:a.pageX,this.clientY=void 0!==a.clientY?a.clientY:a.pageY,this.screenX=a.screenX||0,this.screenY=a.screenY||0);this.button=a.button;this.key=a.key||"";this.ctrlKey=a.ctrlKey;this.altKey=a.altKey;this.shiftKey=a.shiftKey;this.metaKey=
-a.metaKey;this.pointerId=a.pointerId||0;this.pointerType=n(a.pointerType)?a.pointerType:Lc[a.pointerType]||"";this.a=a;a.defaultPrevented&&this.preventDefault();}}v(Kc,F);var Lc=Gc({2:"touch",3:"pen",4:"mouse"});Kc.prototype.preventDefault=function(){Kc.qb.preventDefault.call(this);var a=this.a;if(a.preventDefault)a.preventDefault();else if(a.returnValue=!1,Ic)try{if(a.ctrlKey||112<=a.keyCode&&123>=a.keyCode)a.keyCode=-1;}catch(b){}};Kc.prototype.f=function(){return this.a};var Mc="closure_listenable_"+(1E6*Math.random()|0),Nc=0;function Oc(a,b,c,d,e){this.listener=a;this.proxy=null;this.src=b;this.type=c;this.capture=!!d;this.Na=e;this.key=++Nc;this.ra=this.Ia=!1;}function Pc(a){a.ra=!0;a.listener=null;a.proxy=null;a.src=null;a.Na=null;}function Qc(a){this.src=a;this.a={};this.b=0;}Qc.prototype.add=function(a,b,c,d,e){var f=a.toString();a=this.a[f];a||(a=this.a[f]=[],this.b++);var g=Rc(a,b,d,e);-1<g?(b=a[g],c||(b.Ia=!1)):(b=new Oc(b,this.src,f,!!d,e),b.Ia=c,a.push(b));return b};function Sc(a,b){var c=b.type;c in a.a&&Oa(a.a[c],b)&&(Pc(b),0==a.a[c].length&&(delete a.a[c],a.b--));}function Rc(a,b,c,d){for(var e=0;e<a.length;++e){var f=a[e];if(!f.ra&&f.listener==b&&f.capture==!!c&&f.Na==d)return e}return -1}var Tc="closure_lm_"+(1E6*Math.random()|0),Uc={};function Wc(a,b,c,d,e){if(d&&d.once)Xc(a,b,c,d,e);else if(na(b))for(var f=0;f<b.length;f++)Wc(a,b[f],c,d,e);else c=Yc(c),a&&a[Mc]?Zc(a,b,c,r(d)?!!d.capture:!!d,e):$c(a,b,c,!1,d,e);}
+a.metaKey;this.pointerId=a.pointerId||0;this.pointerType=n(a.pointerType)?a.pointerType:Lc[a.pointerType]||"";this.a=a;a.defaultPrevented&&this.preventDefault();}}v(Kc,F);var Lc=Gc({2:"touch",3:"pen",4:"mouse"});Kc.prototype.preventDefault=function(){Kc.qb.preventDefault.call(this);var a=this.a;if(a.preventDefault)a.preventDefault();else if(a.returnValue=!1,Ic)try{if(a.ctrlKey||112<=a.keyCode&&123>=a.keyCode)a.keyCode=-1;}catch(b){}};Kc.prototype.f=function(){return this.a};var Mc="closure_listenable_"+(1E6*Math.random()|0),Nc=0;function Oc(a,b,c,d,e){this.listener=a;this.proxy=null;this.src=b;this.type=c;this.capture=!!d;this.Pa=e;this.key=++Nc;this.ta=this.Ka=!1;}function Pc(a){a.ta=!0;a.listener=null;a.proxy=null;a.src=null;a.Pa=null;}function Qc(a){this.src=a;this.a={};this.b=0;}Qc.prototype.add=function(a,b,c,d,e){var f=a.toString();a=this.a[f];a||(a=this.a[f]=[],this.b++);var g=Rc(a,b,d,e);-1<g?(b=a[g],c||(b.Ka=!1)):(b=new Oc(b,this.src,f,!!d,e),b.Ka=c,a.push(b));return b};function Sc(a,b){var c=b.type;c in a.a&&Oa(a.a[c],b)&&(Pc(b),0==a.a[c].length&&(delete a.a[c],a.b--));}function Rc(a,b,c,d){for(var e=0;e<a.length;++e){var f=a[e];if(!f.ta&&f.listener==b&&f.capture==!!c&&f.Pa==d)return e}return -1}var Tc="closure_lm_"+(1E6*Math.random()|0),Uc={};function Wc(a,b,c,d,e){if(d&&d.once)Xc(a,b,c,d,e);else if(na(b))for(var f=0;f<b.length;f++)Wc(a,b[f],c,d,e);else c=Yc(c),a&&a[Mc]?Zc(a,b,c,r(d)?!!d.capture:!!d,e):$c(a,b,c,!1,d,e);}
 function $c(a,b,c,d,e,f){if(!b)throw Error("Invalid event type");var g=r(e)?!!e.capture:!!e,h=ad(a);h||(a[Tc]=h=new Qc(a));c=h.add(b,c,d,g,f);if(!c.proxy){d=bd();c.proxy=d;d.src=a;d.listener=c;if(a.addEventListener)Jc||(e=g),void 0===e&&(e=!1),a.addEventListener(b.toString(),d,e);else if(a.attachEvent)a.attachEvent(cd(b.toString()),d);else if(a.addListener&&a.removeListener)a.addListener(d);else throw Error("addEventListener and attachEvent are unavailable.");}}
 function bd(){var a=dd,b=Hc?function(c){return a.call(b.src,b.listener,c)}:function(c){c=a.call(b.src,b.listener,c);if(!c)return c};return b}function Xc(a,b,c,d,e){if(na(b))for(var f=0;f<b.length;f++)Xc(a,b[f],c,d,e);else c=Yc(c),a&&a[Mc]?ed(a,b,c,r(d)?!!d.capture:!!d,e):$c(a,b,c,!0,d,e);}
 function fd(a,b,c,d,e){if(na(b))for(var f=0;f<b.length;f++)fd(a,b[f],c,d,e);else(d=r(d)?!!d.capture:!!d,c=Yc(c),a&&a[Mc])?(a=a.u,b=String(b).toString(),b in a.a&&(f=a.a[b],c=Rc(f,c,d,e),-1<c&&(Pc(f[c]),Array.prototype.splice.call(f,c,1),0==f.length&&(delete a.a[b],a.b--)))):a&&(a=ad(a))&&(b=a.a[b.toString()],a=-1,b&&(a=Rc(b,c,d,e)),(c=-1<a?b[a]:null)&&gd(c));}
-function gd(a){if("number"!=typeof a&&a&&!a.ra){var b=a.src;if(b&&b[Mc])Sc(b.u,a);else{var c=a.type,d=a.proxy;b.removeEventListener?b.removeEventListener(c,d,a.capture):b.detachEvent?b.detachEvent(cd(c),d):b.addListener&&b.removeListener&&b.removeListener(d);(c=ad(b))?(Sc(c,a),0==c.b&&(c.src=null,b[Tc]=null)):Pc(a);}}}function cd(a){return a in Uc?Uc[a]:Uc[a]="on"+a}
-function hd(a,b,c,d){var e=!0;if(a=ad(a))if(b=a.a[b.toString()])for(b=b.concat(),a=0;a<b.length;a++){var f=b[a];f&&f.capture==c&&!f.ra&&(f=id(f,d),e=e&&!1!==f);}return e}function id(a,b){var c=a.listener,d=a.Na||a.src;a.Ia&&gd(a);return c.call(d,b)}
-function dd(a,b){if(a.ra)return !0;if(!Hc){if(!b)a:{b=["window","event"];for(var c=l,d=0;d<b.length;d++)if(c=c[b[d]],null==c){b=null;break a}b=c;}d=b;b=new Kc(d,this);c=!0;if(!(0>d.keyCode||void 0!=d.returnValue)){a:{var e=!1;if(0==d.keyCode)try{d.keyCode=-1;break a}catch(g){e=!0;}if(e||void 0==d.returnValue)d.returnValue=!0;}d=[];for(e=b.b;e;e=e.parentNode)d.push(e);a=a.type;for(e=d.length-1;0<=e;e--){b.b=d[e];var f=hd(d[e],a,!0,b);c=c&&f;}for(e=0;e<d.length;e++)b.b=d[e],f=hd(d[e],a,!1,b),c=c&&f;}return c}return id(a,
-new Kc(b,this))}function ad(a){a=a[Tc];return a instanceof Qc?a:null}var jd="__closure_events_fn_"+(1E9*Math.random()>>>0);function Yc(a){if(q(a))return a;a[jd]||(a[jd]=function(b){return a.handleEvent(b)});return a[jd]}function G(){mc.call(this);this.u=new Qc(this);this.Sb=this;this.Wa=null;}v(G,mc);G.prototype[Mc]=!0;G.prototype.addEventListener=function(a,b,c,d){Wc(this,a,b,c,d);};G.prototype.removeEventListener=function(a,b,c,d){fd(this,a,b,c,d);};
-G.prototype.dispatchEvent=function(a){var b,c=this.Wa;if(c)for(b=[];c;c=c.Wa)b.push(c);c=this.Sb;var d=a.type||a;if(n(a))a=new F(a,c);else if(a instanceof F)a.target=a.target||c;else{var e=a;a=new F(d,c);Wa(a,e);}e=!0;if(b)for(var f=b.length-1;0<=f;f--){var g=a.b=b[f];e=kd(g,d,!0,a)&&e;}g=a.b=c;e=kd(g,d,!0,a)&&e;e=kd(g,d,!1,a)&&e;if(b)for(f=0;f<b.length;f++)g=a.b=b[f],e=kd(g,d,!1,a)&&e;return e};
-G.prototype.xa=function(){G.qb.xa.call(this);if(this.u){var a=this.u,c;for(c in a.a){for(var d=a.a[c],e=0;e<d.length;e++)Pc(d[e]);delete a.a[c];a.b--;}}this.Wa=null;};function Zc(a,b,c,d,e){a.u.add(String(b),c,!1,d,e);}function ed(a,b,c,d,e){a.u.add(String(b),c,!0,d,e);}
-function kd(a,b,c,d){b=a.u.a[String(b)];if(!b)return !0;b=b.concat();for(var e=!0,f=0;f<b.length;++f){var g=b[f];if(g&&!g.ra&&g.capture==c){var h=g.listener,m=g.Na||g.src;g.Ia&&Sc(a.u,g);e=!1!==h.call(m,d)&&e;}}return e&&0!=d.Mb}function md(a,b,c){if(q(a))c&&(a=t(a,c));else if(a&&"function"==typeof a.handleEvent)a=t(a.handleEvent,a);else throw Error("Invalid listener argument");return 2147483647<Number(b)?-1:l.setTimeout(a,b||0)}function nd(a){var b=null;return (new B(function(c,d){b=md(function(){c(void 0);},a);-1==b&&d(Error("Failed to schedule timer."));})).s(function(c){l.clearTimeout(b);throw c;})}function od(a){if(a.U&&"function"==typeof a.U)return a.U();if(n(a))return a.split("");if(oa(a)){for(var b=[],c=a.length,d=0;d<c;d++)b.push(a[d]);return b}b=[];c=0;for(d in a)b[c++]=a[d];return b}function pd(a){if(a.X&&"function"==typeof a.X)return a.X();if(!a.U||"function"!=typeof a.U){if(oa(a)||n(a)){var b=[];a=a.length;for(var c=0;c<a;c++)b.push(c);return b}b=[];c=0;for(var d in a)b[c++]=d;return b}}
+function gd(a){if("number"!=typeof a&&a&&!a.ta){var b=a.src;if(b&&b[Mc])Sc(b.u,a);else{var c=a.type,d=a.proxy;b.removeEventListener?b.removeEventListener(c,d,a.capture):b.detachEvent?b.detachEvent(cd(c),d):b.addListener&&b.removeListener&&b.removeListener(d);(c=ad(b))?(Sc(c,a),0==c.b&&(c.src=null,b[Tc]=null)):Pc(a);}}}function cd(a){return a in Uc?Uc[a]:Uc[a]="on"+a}
+function hd(a,b,c,d){var e=!0;if(a=ad(a))if(b=a.a[b.toString()])for(b=b.concat(),a=0;a<b.length;a++){var f=b[a];f&&f.capture==c&&!f.ta&&(f=id(f,d),e=e&&!1!==f);}return e}function id(a,b){var c=a.listener,d=a.Pa||a.src;a.Ka&&gd(a);return c.call(d,b)}
+function dd(a,b){if(a.ta)return !0;if(!Hc){if(!b)a:{b=["window","event"];for(var c=l,d=0;d<b.length;d++)if(c=c[b[d]],null==c){b=null;break a}b=c;}d=b;b=new Kc(d,this);c=!0;if(!(0>d.keyCode||void 0!=d.returnValue)){a:{var e=!1;if(0==d.keyCode)try{d.keyCode=-1;break a}catch(g){e=!0;}if(e||void 0==d.returnValue)d.returnValue=!0;}d=[];for(e=b.b;e;e=e.parentNode)d.push(e);a=a.type;for(e=d.length-1;0<=e;e--){b.b=d[e];var f=hd(d[e],a,!0,b);c=c&&f;}for(e=0;e<d.length;e++)b.b=d[e],f=hd(d[e],a,!1,b),c=c&&f;}return c}return id(a,
+new Kc(b,this))}function ad(a){a=a[Tc];return a instanceof Qc?a:null}var jd="__closure_events_fn_"+(1E9*Math.random()>>>0);function Yc(a){if(q(a))return a;a[jd]||(a[jd]=function(b){return a.handleEvent(b)});return a[jd]}function G(){mc.call(this);this.u=new Qc(this);this.Sb=this;this.Xa=null;}v(G,mc);G.prototype[Mc]=!0;G.prototype.addEventListener=function(a,b,c,d){Wc(this,a,b,c,d);};G.prototype.removeEventListener=function(a,b,c,d){fd(this,a,b,c,d);};
+G.prototype.dispatchEvent=function(a){var b,c=this.Xa;if(c)for(b=[];c;c=c.Xa)b.push(c);c=this.Sb;var d=a.type||a;if(n(a))a=new F(a,c);else if(a instanceof F)a.target=a.target||c;else{var e=a;a=new F(d,c);Wa(a,e);}e=!0;if(b)for(var f=b.length-1;0<=f;f--){var g=a.b=b[f];e=kd(g,d,!0,a)&&e;}g=a.b=c;e=kd(g,d,!0,a)&&e;e=kd(g,d,!1,a)&&e;if(b)for(f=0;f<b.length;f++)g=a.b=b[f],e=kd(g,d,!1,a)&&e;return e};
+G.prototype.za=function(){G.qb.za.call(this);if(this.u){var a=this.u,c;for(c in a.a){for(var d=a.a[c],e=0;e<d.length;e++)Pc(d[e]);delete a.a[c];a.b--;}}this.Xa=null;};function Zc(a,b,c,d,e){a.u.add(String(b),c,!1,d,e);}function ed(a,b,c,d,e){a.u.add(String(b),c,!0,d,e);}
+function kd(a,b,c,d){b=a.u.a[String(b)];if(!b)return !0;b=b.concat();for(var e=!0,f=0;f<b.length;++f){var g=b[f];if(g&&!g.ta&&g.capture==c){var h=g.listener,m=g.Pa||g.src;g.Ka&&Sc(a.u,g);e=!1!==h.call(m,d)&&e;}}return e&&0!=d.Mb}function md(a,b,c){if(q(a))c&&(a=t(a,c));else if(a&&"function"==typeof a.handleEvent)a=t(a.handleEvent,a);else throw Error("Invalid listener argument");return 2147483647<Number(b)?-1:l.setTimeout(a,b||0)}function nd(a){var b=null;return (new B(function(c,d){b=md(function(){c(void 0);},a);-1==b&&d(Error("Failed to schedule timer."));})).s(function(c){l.clearTimeout(b);throw c;})}function od(a){if(a.U&&"function"==typeof a.U)return a.U();if(n(a))return a.split("");if(oa(a)){for(var b=[],c=a.length,d=0;d<c;d++)b.push(a[d]);return b}b=[];c=0;for(d in a)b[c++]=a[d];return b}function pd(a){if(a.X&&"function"==typeof a.X)return a.X();if(!a.U||"function"!=typeof a.U){if(oa(a)||n(a)){var b=[];a=a.length;for(var c=0;c<a;c++)b.push(c);return b}b=[];c=0;for(var d in a)b[c++]=d;return b}}
 function qd(a,b){if(a.forEach&&"function"==typeof a.forEach)a.forEach(b,void 0);else if(oa(a)||n(a))x(a,b,void 0);else for(var c=pd(a),d=od(a),e=d.length,f=0;f<e;f++)b.call(void 0,d[f],c&&c[f],a);}function rd(a,b){this.b={};this.a=[];this.c=0;var c=arguments.length;if(1<c){if(c%2)throw Error("Uneven number of arguments");for(var d=0;d<c;d+=2)this.set(arguments[d],arguments[d+1]);}else if(a)if(a instanceof rd)for(c=a.X(),d=0;d<c.length;d++)this.set(c[d],a.get(c[d]));else for(d in a)this.set(d,a[d]);}k=rd.prototype;k.U=function(){sd(this);for(var a=[],b=0;b<this.a.length;b++)a.push(this.b[this.a[b]]);return a};k.X=function(){sd(this);return this.a.concat()};
 k.clear=function(){this.b={};this.c=this.a.length=0;};function sd(a){if(a.c!=a.a.length){for(var b=0,c=0;b<a.a.length;){var d=a.a[b];td(a.b,d)&&(a.a[c++]=d);b++;}a.a.length=c;}if(a.c!=a.a.length){var e={};for(c=b=0;b<a.a.length;)d=a.a[b],td(e,d)||(a.a[c++]=d,e[d]=1),b++;a.a.length=c;}}k.get=function(a,b){return td(this.b,a)?this.b[a]:b};k.set=function(a,b){td(this.b,a)||(this.c++,this.a.push(a));this.b[a]=b;};
 k.forEach=function(a,b){for(var c=this.X(),d=0;d<c.length;d++){var e=c[d],f=this.get(e);a.call(b,f,e,this);}};function td(a,b){return Object.prototype.hasOwnProperty.call(a,b)}var ud=/^(?:([^:/?#.]+):)?(?:\/\/(?:([^/?#]*)@)?([^/#?]*?)(?::([0-9]+))?(?=[/#?]|$))?([^?#]+)?(?:\?([^#]*))?(?:#([\s\S]*))?$/;function vd(a,b){if(a){a=a.split("&");for(var c=0;c<a.length;c++){var d=a[c].indexOf("="),e=null;if(0<=d){var f=a[c].substring(0,d);e=a[c].substring(d+1);}else f=a[c];b(f,e?decodeURIComponent(e.replace(/\+/g," ")):"");}}}function wd(a,b){this.b=this.i=this.f="";this.l=null;this.g=this.c="";this.h=!1;var c;a instanceof wd?(this.h=void 0!==b?b:a.h,xd(this,a.f),this.i=a.i,this.b=a.b,yd(this,a.l),this.c=a.c,zd(this,Ad(a.a)),this.g=a.g):a&&(c=String(a).match(ud))?(this.h=!!b,xd(this,c[1]||"",!0),this.i=Bd(c[2]||""),this.b=Bd(c[3]||"",!0),yd(this,c[4]),this.c=Bd(c[5]||"",!0),zd(this,c[6]||"",!0),this.g=Bd(c[7]||"")):(this.h=!!b,this.a=new Cd(null,this.h));}
@@ -1319,11 +1645,11 @@ function pe(a,b,c){var d=Math.floor(1E9*Math.random()).toString();b=b||500;c=c||
 for(g in a)switch(g){case "width":case "height":case "top":case "left":e.push(g+"="+a[g]);break;case "target":case "noopener":case "noreferrer":break;default:e.push(g+"="+(a[g]?1:0));}var g=e.join(",");(z("iPhone")&&!z("iPod")&&!z("iPad")||z("iPad")||z("iPod"))&&d.navigator&&d.navigator.standalone&&c&&"_self"!=c?(g=d.document.createElement("A"),Ga(g,"HTMLAnchorElement"),b instanceof rb||b instanceof rb||(b="object"==typeof b&&b.qa?b.pa():String(b),ub.test(b)||(b="about:invalid#zClosurez"),b=wb(b)),
 g.href=tb(b),g.setAttribute("target",c),a.noreferrer&&g.setAttribute("rel","noreferrer"),a=document.createEvent("MouseEvent"),a.initMouseEvent("click",!0,!0,d,1),g.dispatchEvent(a),g={}):a.noreferrer?(g=d.open("",c,g),a=tb(b).toString(),g&&(wc&&y(a,";")&&(a="'"+a.replace(/'/g,"%27")+"'"),g.opener=null,a=Db('<meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0; url='+Ib(a)+'">'),g.document.write(Cb(a)),g.document.close())):(g=d.open(tb(b).toString(),c,g))&&a.noopener&&
 (g.opener=null);if(g)try{g.focus();}catch(h){}return g}function re(a){return new B(function(b){function c(){nd(2E3).then(function(){if(!a||a.closed)b();else return c()});}return c()})}var se=/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/,te=/^[^@]+@[^@]+$/;function ue(){var a=null;return (new B(function(b){"complete"==l.document.readyState?b():(a=function(){b();},Xc(window,"load",a));})).s(function(b){fd(window,"load",a);throw b;})}
-function ve(){return we(void 0)?ue().then(function(){return new B(function(a,b){var c=l.document,d=setTimeout(function(){b(Error("Cordova framework is not ready."));},1E3);c.addEventListener("deviceready",function(){clearTimeout(d);a();},!1);})}):E(Error("Cordova must run in an Android or iOS file scheme."))}function we(a){a=a||I();return !("file:"!==xe()||!a.toLowerCase().match(/iphone|ipad|ipod|android/))}function ye(){var a=l.window;try{return !(!a||a==a.top)}catch(b){return !1}}
-function ze(){return "undefined"!==typeof l.WorkerGlobalScope&&"function"===typeof l.importScripts}function Ae(){return firebase.INTERNAL.hasOwnProperty("reactNative")?"ReactNative":firebase.INTERNAL.hasOwnProperty("node")?"Node":ze()?"Worker":"Browser"}function Be(){var a=Ae();return "ReactNative"===a||"Node"===a}function Ce(){for(var a=50,b=[];0<a;)b.push("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(Math.floor(62*Math.random()))),a--;return b.join("")}
+function ve(){return we(void 0)?ue().then(function(){return new B(function(a,b){var c=l.document,d=setTimeout(function(){b(Error("Cordova framework is not ready."));},1E3);c.addEventListener("deviceready",function(){clearTimeout(d);a();},!1);})}):E(Error("Cordova must run in an Android or iOS file scheme."))}function we(a){a=a||I();return !("file:"!==xe()&&"ionic:"!==xe()||!a.toLowerCase().match(/iphone|ipad|ipod|android/))}function ye(){var a=l.window;try{return !(!a||a==a.top)}catch(b){return !1}}
+function ze(){return "undefined"!==typeof l.WorkerGlobalScope&&"function"===typeof l.importScripts}function Ae(){return firebase$1.INTERNAL.hasOwnProperty("reactNative")?"ReactNative":firebase$1.INTERNAL.hasOwnProperty("node")?"Node":ze()?"Worker":"Browser"}function Be(){var a=Ae();return "ReactNative"===a||"Node"===a}function Ce(){for(var a=50,b=[];0<a;)b.push("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(Math.floor(62*Math.random()))),a--;return b.join("")}
 var qe="Firefox",me="Chrome";
 function le(a){var b=a.toLowerCase();if(y(b,"opera/")||y(b,"opr/")||y(b,"opios/"))return "Opera";if(y(b,"iemobile"))return "IEMobile";if(y(b,"msie")||y(b,"trident/"))return "IE";if(y(b,"edge/"))return "Edge";if(y(b,"firefox/"))return qe;if(y(b,"silk/"))return "Silk";if(y(b,"blackberry"))return "Blackberry";if(y(b,"webos"))return "Webos";if(!y(b,"safari/")||y(b,"chrome/")||y(b,"crios/")||y(b,"android"))if(!y(b,"chrome/")&&!y(b,"crios/")||y(b,"edge/")){if(y(b,"android"))return "Android";if((a=a.match(/([a-zA-Z\d\.]+)\/[a-zA-Z\d\.]*$/))&&
-2==a.length)return a[1]}else return me;else return "Safari";return "Other"}var De={Vc:"FirebaseCore-web",Xc:"FirebaseUI-web"};function Ee(a,b){b=b||[];var c=[],d={},e;for(e in De)d[De[e]]=!0;for(e=0;e<b.length;e++)"undefined"!==typeof d[b[e]]&&(delete d[b[e]],c.push(b[e]));c.sort();b=c;b.length||(b=["FirebaseCore-web"]);c=Ae();"Browser"===c?(d=I(),c=le(d)):"Worker"===c&&(d=I(),c=le(d)+"-"+c);return c+"/JsCore/"+a+"/"+b.join(",")}function I(){return l.navigator&&l.navigator.userAgent||""}
+2==a.length)return a[1]}else return me;else return "Safari";return "Other"}var De={Wc:"FirebaseCore-web",Yc:"FirebaseUI-web"};function Ee(a,b){b=b||[];var c=[],d={},e;for(e in De)d[De[e]]=!0;for(e=0;e<b.length;e++)"undefined"!==typeof d[b[e]]&&(delete d[b[e]],c.push(b[e]));c.sort();b=c;b.length||(b=["FirebaseCore-web"]);c=Ae();"Browser"===c?(d=I(),c=le(d)):"Worker"===c&&(d=I(),c=le(d)+"-"+c);return c+"/JsCore/"+a+"/"+b.join(",")}function I(){return l.navigator&&l.navigator.userAgent||""}
 function J(a,b){a=a.split(".");b=b||l;for(var c=0;c<a.length&&"object"==typeof b&&null!=b;c++)b=b[a[c]];c!=a.length&&(b=void 0);return b}function Fe(){try{var a=l.localStorage,b=Ge();if(a)return a.setItem(b,"1"),a.removeItem(b),ge()?!!l.indexedDB:!0}catch(c){return ze()&&!!l.indexedDB}return !1}function He(){return (Ie()||"chrome-extension:"===xe()||we())&&!Be()&&Fe()&&!ze()}function Ie(){return "http:"===xe()||"https:"===xe()}function xe(){return l.location&&l.location.protocol||null}
 function Je(a){a=a||I();return ne(a)||le(a)==qe?!1:!0}function Ke(a){return "undefined"===typeof a?null:ae(a)}function Le(a){var b={},c;for(c in a)a.hasOwnProperty(c)&&null!==a[c]&&void 0!==a[c]&&(b[c]=a[c]);return b}function Me(a){if(null!==a)return JSON.parse(a)}function Ge(a){return a?a:Math.floor(1E9*Math.random()).toString()}function Ne(a){a=a||I();return "Safari"==le(a)||a.toLowerCase().match(/iphone|ipad|ipod/)?!1:!0}
 function Oe(){var a=l.___jsl;if(a&&a.H)for(var b in a.H)if(a.H[b].r=a.H[b].r||[],a.H[b].L=a.H[b].L||[],a.H[b].r=a.H[b].L.concat(),a.CP)for(var c=0;c<a.CP.length;c++)a.CP[c]=null;}function Pe(a,b){if(a>b)throw Error("Short delay should be less than long delay!");this.a=a;this.c=b;a=I();b=Ae();this.b=ne(a)||"ReactNative"===b;}
@@ -1341,21 +1667,22 @@ var nf="auth/",of={"admin-restricted-operation":"This operation is restricted to
 "invalid-action-code":"The action code is invalid. This can happen if the code is malformed, expired, or has already been used.","wrong-password":"The password is invalid or the user does not have a password.","invalid-persistence-type":"The specified persistence type is invalid. It can only be local, session or none.","invalid-phone-number":"The format of the phone number provided is incorrect. Please enter the phone number in a format that can be parsed into E.164 format. E.164 phone numbers are written in the format [+][country code][subscriber number including area code].",
 "invalid-provider-id":"The specified provider ID is invalid.","invalid-recipient-email":"The email corresponding to this action failed to send as the provided recipient email address is invalid.","invalid-sender":"The email template corresponding to this action contains an invalid sender email or name. Please fix by going to the Auth email templates section in the Firebase Console.","invalid-verification-id":"The verification ID used to create the phone auth credential is invalid.","invalid-tenant-id":"The Auth instance's tenant ID is invalid.",
 "missing-android-pkg-name":"An Android Package Name must be provided if the Android App is required to be installed.","auth-domain-config-required":"Be sure to include authDomain when calling firebase.initializeApp(), by following the instructions in the Firebase console.","missing-app-credential":"The phone verification request is missing an application verifier assertion. A reCAPTCHA response token needs to be provided.","missing-verification-code":"The phone auth credential was created with an empty SMS verification code.",
-"missing-continue-uri":"A continue URL must be provided in the request.","missing-iframe-start":"An internal error has occurred.","missing-ios-bundle-id":"An iOS Bundle ID must be provided if an App Store ID is provided.","missing-or-invalid-nonce":"The OIDC ID token requires a valid unhashed nonce.","missing-phone-number":"To send verification codes, provide a phone number for the recipient.","missing-verification-id":"The phone auth credential was created with an empty verification ID.","app-deleted":"This instance of FirebaseApp has been deleted.",
-"account-exists-with-different-credential":"An account already exists with the same email address but different sign-in credentials. Sign in using a provider associated with this email address.","network-request-failed":"A network error (such as timeout, interrupted connection or unreachable host) has occurred.","no-auth-event":"An internal error has occurred.","no-such-provider":"User was not linked to an account with the given provider.","null-user":"A null user object was provided as the argument for an operation which requires a non-null user object.",
-"operation-not-allowed":"The given sign-in provider is disabled for this Firebase project. Enable it in the Firebase console, under the sign-in method tab of the Auth section.","operation-not-supported-in-this-environment":'This operation is not supported in the environment this application is running on. "location.protocol" must be http, https or chrome-extension and web storage must be enabled.',"popup-blocked":"Unable to establish a connection with the popup. It may have been blocked by the browser.",
-"popup-closed-by-user":"The popup has been closed by the user before finalizing the operation.","provider-already-linked":"User can only be linked to one identity for the given provider.","quota-exceeded":"The project's quota for this operation has been exceeded.","redirect-cancelled-by-user":"The redirect operation has been cancelled by the user before finalizing.","redirect-operation-pending":"A redirect sign-in operation is already pending.","rejected-credential":"The request contains malformed or mismatching credentials.",
-"tenant-id-mismatch":"The provided tenant ID does not match the Auth instance's tenant ID",timeout:"The operation has timed out.","user-token-expired":"The user's credential is no longer valid. The user must sign in again.","too-many-requests":"We have blocked all requests from this device due to unusual activity. Try again later.","unauthorized-continue-uri":"The domain of the continue URL is not whitelisted.  Please whitelist the domain in the Firebase console.","unsupported-persistence-type":"The current environment does not support the specified persistence type.",
-"unsupported-tenant-operation":"This operation is not supported in a multi-tenant context.","user-cancelled":"User did not grant your application the permissions it requested.","user-not-found":"There is no user record corresponding to this identifier. The user may have been deleted.","user-disabled":"The user account has been disabled by an administrator.","user-mismatch":"The supplied credentials do not correspond to the previously signed in user.","user-signed-out":"","weak-password":"The password must be 6 characters long or more.",
-"web-storage-unsupported":"This browser is not supported or 3rd party cookies and data may be disabled."};function qf(a){a=Ld(a);var b=Kd(a,rf)||null,c=Kd(a,sf)||null,d=Kd(a,tf)||null;d=d?uf[d]||null:null;if(!b||!c||!d)throw new M("argument-error",rf+", "+sf+"and "+tf+" are required in a valid action code URL.");L(this,{apiKey:b,operation:d,code:c,continueUrl:Kd(a,vf)||null,languageCode:Kd(a,wf)||null,tenantId:Kd(a,xf)||null});}var rf="apiKey",sf="oobCode",vf="continueUrl",wf="languageCode",tf="mode",xf="tenantId",uf={recoverEmail:"RECOVER_EMAIL",resetPassword:"PASSWORD_RESET",signIn:hf,verifyEmail:"VERIFY_EMAIL"};
+"missing-continue-uri":"A continue URL must be provided in the request.","missing-iframe-start":"An internal error has occurred.","missing-ios-bundle-id":"An iOS Bundle ID must be provided if an App Store ID is provided.","missing-or-invalid-nonce":"The request does not contain a valid nonce. This can occur if the SHA-256 hash of the provided raw nonce does not match the hashed nonce in the ID token payload.","missing-phone-number":"To send verification codes, provide a phone number for the recipient.",
+"missing-verification-id":"The phone auth credential was created with an empty verification ID.","app-deleted":"This instance of FirebaseApp has been deleted.","account-exists-with-different-credential":"An account already exists with the same email address but different sign-in credentials. Sign in using a provider associated with this email address.","network-request-failed":"A network error (such as timeout, interrupted connection or unreachable host) has occurred.","no-auth-event":"An internal error has occurred.",
+"no-such-provider":"User was not linked to an account with the given provider.","null-user":"A null user object was provided as the argument for an operation which requires a non-null user object.","operation-not-allowed":"The given sign-in provider is disabled for this Firebase project. Enable it in the Firebase console, under the sign-in method tab of the Auth section.","operation-not-supported-in-this-environment":'This operation is not supported in the environment this application is running on. "location.protocol" must be http, https or chrome-extension and web storage must be enabled.',
+"popup-blocked":"Unable to establish a connection with the popup. It may have been blocked by the browser.","popup-closed-by-user":"The popup has been closed by the user before finalizing the operation.","provider-already-linked":"User can only be linked to one identity for the given provider.","quota-exceeded":"The project's quota for this operation has been exceeded.","redirect-cancelled-by-user":"The redirect operation has been cancelled by the user before finalizing.","redirect-operation-pending":"A redirect sign-in operation is already pending.",
+"rejected-credential":"The request contains malformed or mismatching credentials.","tenant-id-mismatch":"The provided tenant ID does not match the Auth instance's tenant ID",timeout:"The operation has timed out.","user-token-expired":"The user's credential is no longer valid. The user must sign in again.","too-many-requests":"We have blocked all requests from this device due to unusual activity. Try again later.","unauthorized-continue-uri":"The domain of the continue URL is not whitelisted.  Please whitelist the domain in the Firebase console.",
+"unsupported-persistence-type":"The current environment does not support the specified persistence type.","unsupported-tenant-operation":"This operation is not supported in a multi-tenant context.","user-cancelled":"The user did not grant your application the permissions it requested.","user-not-found":"There is no user record corresponding to this identifier. The user may have been deleted.","user-disabled":"The user account has been disabled by an administrator.","user-mismatch":"The supplied credentials do not correspond to the previously signed in user.",
+"user-signed-out":"","weak-password":"The password must be 6 characters long or more.","web-storage-unsupported":"This browser is not supported or 3rd party cookies and data may be disabled."};function qf(a){a=Ld(a);var b=Kd(a,rf)||null,c=Kd(a,sf)||null,d=Kd(a,tf)||null;d=d?uf[d]||null:null;if(!b||!c||!d)throw new M("argument-error",rf+", "+sf+"and "+tf+" are required in a valid action code URL.");L(this,{apiKey:b,operation:d,code:c,continueUrl:Kd(a,vf)||null,languageCode:Kd(a,wf)||null,tenantId:Kd(a,xf)||null});}var rf="apiKey",sf="oobCode",vf="continueUrl",wf="languageCode",tf="mode",xf="tenantId",uf={recoverEmail:"RECOVER_EMAIL",resetPassword:"PASSWORD_RESET",signIn:hf,verifyEmail:"VERIFY_EMAIL"};
 function yf(a){try{return new qf(a)}catch(b){return null}}function zf(a){var b=a[Af];if("undefined"===typeof b)throw new M("missing-continue-uri");if("string"!==typeof b||"string"===typeof b&&!b.length)throw new M("invalid-continue-uri");this.h=b;this.b=this.a=null;this.g=!1;var c=a[Bf];if(c&&"object"===typeof c){b=c[Cf];var d=c[Df];c=c[Ef];if("string"===typeof b&&b.length){this.a=b;if("undefined"!==typeof d&&"boolean"!==typeof d)throw new M("argument-error",Df+" property must be a boolean when specified.");this.g=!!d;if("undefined"!==typeof c&&("string"!==
 typeof c||"string"===typeof c&&!c.length))throw new M("argument-error",Ef+" property must be a non empty string when specified.");this.b=c||null;}else{if("undefined"!==typeof b)throw new M("argument-error",Cf+" property must be a non empty string when specified.");if("undefined"!==typeof d||"undefined"!==typeof c)throw new M("missing-android-pkg-name");}}else if("undefined"!==typeof c)throw new M("argument-error",Bf+" property must be a non null object when specified.");this.f=null;if((b=a[Ff])&&"object"===
 typeof b)if(b=b[Gf],"string"===typeof b&&b.length)this.f=b;else{if("undefined"!==typeof b)throw new M("argument-error",Gf+" property must be a non empty string when specified.");}else if("undefined"!==typeof b)throw new M("argument-error",Ff+" property must be a non null object when specified.");b=a[Hf];if("undefined"!==typeof b&&"boolean"!==typeof b)throw new M("argument-error",Hf+" property must be a boolean when specified.");this.c=!!b;a=a[If];if("undefined"!==typeof a&&("string"!==typeof a||"string"===
 typeof a&&!a.length))throw new M("argument-error",If+" property must be a non empty string when specified.");this.i=a||null;}var Bf="android",If="dynamicLinkDomain",Hf="handleCodeInApp",Ff="iOS",Af="url",Df="installApp",Ef="minimumVersion",Cf="packageName",Gf="bundleId";
 function Jf(a){var b={};b.continueUrl=a.h;b.canHandleCodeInApp=a.c;if(b.androidPackageName=a.a)b.androidMinimumVersion=a.b,b.androidInstallApp=a.g;b.iOSBundleId=a.f;b.dynamicLinkDomain=a.i;for(var c in b)null===b[c]&&delete b[c];return b}function Kf(a){return Ja(a,function(b){b=b.toString(16);return 1<b.length?b:"0"+b}).join("")}var Lf=null,Mf=null;function Nf(a){var b="";Of(a,function(c){b+=String.fromCharCode(c);});return b}function Of(a,b){function c(m){for(;d<a.length;){var p=a.charAt(d++),u=Mf[p];if(null!=u)return u;if(!/^[\s\xa0]*$/.test(p))throw Error("Unknown base64 encoding at char: "+p);}return m}Pf();for(var d=0;;){var e=c(-1),f=c(0),g=c(64),h=c(64);if(64===h&&-1===e)break;b(e<<2|f>>4);64!=g&&(b(f<<4&240|g>>2),64!=h&&b(g<<6&192|h));}}
 function Pf(){if(!Lf){Lf={};Mf={};for(var a=0;65>a;a++)Lf[a]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=".charAt(a),Mf[Lf[a]]=a,62<=a&&(Mf["ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.".charAt(a)]=a);}}function Qf(a){this.f=a.sub;this.a=a.provider_id||a.firebase&&a.firebase.sign_in_provider||null;this.c=a.firebase&&a.firebase.tenant||null;this.b=!!a.is_anonymous||"anonymous"==this.a;}Qf.prototype.R=function(){return this.c};Qf.prototype.g=function(){return this.b};function Rf(a){return (a=Sf(a))&&a.sub&&a.iss&&a.aud&&a.exp?new Qf(a):null}
-function Sf(a){if(!a)return null;a=a.split(".");if(3!=a.length)return null;a=a[1];for(var b=(4-a.length%4)%4,c=0;c<b;c++)a+=".";try{return JSON.parse(Nf(a))}catch(d){}return null}var Tf={ad:{bb:"https://www.googleapis.com/identitytoolkit/v3/relyingparty/",ib:"https://securetoken.googleapis.com/v1/token",id:"p"},cd:{bb:"https://staging-www.sandbox.googleapis.com/identitytoolkit/v3/relyingparty/",ib:"https://staging-securetoken.sandbox.googleapis.com/v1/token",id:"s"},dd:{bb:"https://www-googleapis-test.sandbox.google.com/identitytoolkit/v3/relyingparty/",ib:"https://test-securetoken.sandbox.googleapis.com/v1/token",id:"t"}};
-function Uf(a){for(var b in Tf)if(Tf[b].id===a)return a=Tf[b],{firebaseEndpoint:a.bb,secureTokenEndpoint:a.ib};return null}var Vf;Vf=Uf("__EID__")?"__EID__":void 0;var Wf="oauth_consumer_key oauth_nonce oauth_signature oauth_signature_method oauth_timestamp oauth_token oauth_version".split(" "),Xf=["client_id","response_type","scope","redirect_uri","state"],Yf={Wc:{Oa:"locale",Da:500,Ca:600,Pa:"facebook.com",hb:Xf},Yc:{Oa:null,Da:500,Ca:620,Pa:"github.com",hb:Xf},Zc:{Oa:"hl",Da:515,Ca:680,Pa:"google.com",hb:Xf},ed:{Oa:"lang",Da:485,Ca:705,Pa:"twitter.com",hb:Wf}};function Zf(a){for(var b in Yf)if(Yf[b].Pa==a)return Yf[b];return null}function $f(a){var b={};b["facebook.com"]=ag;b["google.com"]=bg;b["github.com"]=cg;b["twitter.com"]=dg;var c=a&&a[eg];try{if(c)return b[c]?new b[c](a):new fg(a);if("undefined"!==typeof a[gg])return new hg(a)}catch(d){}return null}var gg="idToken",eg="providerId";
+function Sf(a){if(!a)return null;a=a.split(".");if(3!=a.length)return null;a=a[1];for(var b=(4-a.length%4)%4,c=0;c<b;c++)a+=".";try{return JSON.parse(Nf(a))}catch(d){}return null}var Tf={bd:{cb:"https://www.googleapis.com/identitytoolkit/v3/relyingparty/",ib:"https://securetoken.googleapis.com/v1/token",id:"p"},dd:{cb:"https://staging-www.sandbox.googleapis.com/identitytoolkit/v3/relyingparty/",ib:"https://staging-securetoken.sandbox.googleapis.com/v1/token",id:"s"},ed:{cb:"https://www-googleapis-test.sandbox.google.com/identitytoolkit/v3/relyingparty/",ib:"https://test-securetoken.sandbox.googleapis.com/v1/token",id:"t"}};
+function Uf(a){for(var b in Tf)if(Tf[b].id===a)return a=Tf[b],{firebaseEndpoint:a.cb,secureTokenEndpoint:a.ib};return null}var Vf;Vf=Uf("__EID__")?"__EID__":void 0;var Wf="oauth_consumer_key oauth_nonce oauth_signature oauth_signature_method oauth_timestamp oauth_token oauth_version".split(" "),Xf=["client_id","response_type","scope","redirect_uri","state"],Yf={Xc:{Ea:"locale",sa:700,ra:600,Fa:"facebook.com",Qa:Xf},Zc:{Ea:null,sa:500,ra:750,Fa:"github.com",Qa:Xf},$c:{Ea:"hl",sa:515,ra:680,Fa:"google.com",Qa:Xf},fd:{Ea:"lang",sa:485,ra:705,Fa:"twitter.com",Qa:Wf},Vc:{Ea:"locale",sa:600,ra:600,Fa:"apple.com",Qa:[]}};
+function Zf(a){for(var b in Yf)if(Yf[b].Fa==a)return Yf[b];return null}function $f(a){var b={};b["facebook.com"]=ag;b["google.com"]=bg;b["github.com"]=cg;b["twitter.com"]=dg;var c=a&&a[eg];try{if(c)return b[c]?new b[c](a):new fg(a);if("undefined"!==typeof a[gg])return new hg(a)}catch(d){}return null}var gg="idToken",eg="providerId";
 function hg(a){var b=a[eg];if(!b&&a[gg]){var c=Rf(a[gg]);c&&c.a&&(b=c.a);}if(!b)throw Error("Invalid additional user info!");if("anonymous"==b||"custom"==b)b=null;c=!1;"undefined"!==typeof a.isNewUser?c=!!a.isNewUser:"identitytoolkit#SignupNewUserResponse"===a.kind&&(c=!0);K(this,"providerId",b);K(this,"isNewUser",c);}function fg(a){hg.call(this,a);a=Me(a.rawUserInfo||"{}");K(this,"profile",cf(a||{}));}v(fg,hg);
 function ag(a){fg.call(this,a);if("facebook.com"!=this.providerId)throw Error("Invalid provider ID!");}v(ag,fg);function cg(a){fg.call(this,a);if("github.com"!=this.providerId)throw Error("Invalid provider ID!");K(this,"username",this.profile&&this.profile.login||null);}v(cg,fg);function bg(a){fg.call(this,a);if("google.com"!=this.providerId)throw Error("Invalid provider ID!");}v(bg,fg);
 function dg(a){fg.call(this,a);if("twitter.com"!=this.providerId)throw Error("Invalid provider ID!");K(this,"username",a.screenName||null);}v(dg,fg);function ig(a){var b=Ld(a),c=Kd(b,"link"),d=Kd(Ld(c),"link");b=Kd(b,"deep_link_id");return Kd(Ld(b),"link")||b||d||c||a}function jg(){}function kg(a,b){return a.then(function(c){if(c[lg]){var d=Rf(c[lg]);if(!d||b!=d.f)throw new M("user-mismatch");return c}throw new M("user-mismatch");}).s(function(c){throw c&&c.code&&c.code==nf+"user-not-found"?new M("user-mismatch"):c;})}function mg(a,b){if(b)this.a=b;else throw new M("internal-error","failed to construct a credential");K(this,"providerId",a);K(this,"signInMethod",a);}mg.prototype.na=function(a){return ng(a,og(this))};
@@ -1364,21 +1691,21 @@ function sg(a,b,c){this.a=null;if(b.idToken||b.accessToken)b.idToken&&K(this,"id
 sg.prototype.na=function(a){return ng(a,tg(this))};sg.prototype.b=function(a,b){var c=tg(this);c.idToken=b;return pg(a,c)};sg.prototype.f=function(a,b){var c=tg(this);return kg(qg(a,c),b)};
 function tg(a){var b={};a.idToken&&(b.id_token=a.idToken);a.accessToken&&(b.access_token=a.accessToken);a.secret&&(b.oauth_token_secret=a.secret);b.providerId=a.providerId;a.nonce&&!a.a&&(b.nonce=a.nonce);b={postBody:Pd(b).toString(),requestUri:"http://localhost"};a.a&&(delete b.postBody,b.pendingToken=a.a);return b}
 sg.prototype.A=function(){var a={providerId:this.providerId,signInMethod:this.signInMethod};this.idToken&&(a.oauthIdToken=this.idToken);this.accessToken&&(a.oauthAccessToken=this.accessToken);this.secret&&(a.oauthTokenSecret=this.secret);this.nonce&&(a.nonce=this.nonce);this.a&&(a.pendingToken=this.a);return a};
-function ug(a){if(a&&a.providerId&&a.signInMethod){var b={idToken:a.oauthIdToken,accessToken:a.oauthTokenSecret?null:a.oauthAccessToken,oauthTokenSecret:a.oauthTokenSecret,oauthToken:a.oauthTokenSecret&&a.oauthAccessToken,nonce:a.nonce,pendingToken:a.pendingToken};try{return new sg(a.providerId,b,a.signInMethod)}catch(c){}}return null}function vg(a,b){this.Fc=b||[];L(this,{providerId:a,isOAuthProvider:!0});this.zb={};this.cb=(Zf(a)||{}).Oa||null;this.ab=null;}
-vg.prototype.Ea=function(a){this.zb=Ua(a);return this};function wg(a){if("string"!==typeof a||0!=a.indexOf("saml."))throw new M("argument-error",'SAML provider IDs must be prefixed with "saml."');vg.call(this,a,[]);}v(wg,vg);function O(a){vg.call(this,a,Xf);this.a=[];}v(O,vg);O.prototype.wa=function(a){Na(this.a,a)||this.a.push(a);return this};O.prototype.Hb=function(){return Ra(this.a)};
+function ug(a){if(a&&a.providerId&&a.signInMethod){var b={idToken:a.oauthIdToken,accessToken:a.oauthTokenSecret?null:a.oauthAccessToken,oauthTokenSecret:a.oauthTokenSecret,oauthToken:a.oauthTokenSecret&&a.oauthAccessToken,nonce:a.nonce,pendingToken:a.pendingToken};try{return new sg(a.providerId,b,a.signInMethod)}catch(c){}}return null}function vg(a,b){this.Fc=b||[];L(this,{providerId:a,isOAuthProvider:!0});this.zb={};this.eb=(Zf(a)||{}).Ea||null;this.bb=null;}
+vg.prototype.Ga=function(a){this.zb=Ua(a);return this};function wg(a){if("string"!==typeof a||0!=a.indexOf("saml."))throw new M("argument-error",'SAML provider IDs must be prefixed with "saml."');vg.call(this,a,[]);}v(wg,vg);function O(a){vg.call(this,a,Xf);this.a=[];}v(O,vg);O.prototype.ya=function(a){Na(this.a,a)||this.a.push(a);return this};O.prototype.Hb=function(){return Ra(this.a)};
 O.prototype.credential=function(a,b){var c;r(a)?c={idToken:a.idToken||null,accessToken:a.accessToken||null,nonce:a.rawNonce||null}:c={idToken:a||null,accessToken:b||null};if(!c.idToken&&!c.accessToken)throw new M("argument-error","credential failed: must provide the ID token and/or the access token.");return new sg(this.providerId,c,this.providerId)};function xg(){O.call(this,"facebook.com");}v(xg,O);K(xg,"PROVIDER_ID","facebook.com");K(xg,"FACEBOOK_SIGN_IN_METHOD","facebook.com");
 function yg(a){if(!a)throw new M("argument-error","credential failed: expected 1 argument (the OAuth access token).");var b=a;r(a)&&(b=a.accessToken);return (new xg).credential({accessToken:b})}function zg(){O.call(this,"github.com");}v(zg,O);K(zg,"PROVIDER_ID","github.com");K(zg,"GITHUB_SIGN_IN_METHOD","github.com");
-function Ag(a){if(!a)throw new M("argument-error","credential failed: expected 1 argument (the OAuth access token).");var b=a;r(a)&&(b=a.accessToken);return (new zg).credential({accessToken:b})}function Bg(){O.call(this,"google.com");this.wa("profile");}v(Bg,O);K(Bg,"PROVIDER_ID","google.com");K(Bg,"GOOGLE_SIGN_IN_METHOD","google.com");function Cg(a,b){var c=a;r(a)&&(c=a.idToken,b=a.accessToken);return (new Bg).credential({idToken:c,accessToken:b})}function Dg(){vg.call(this,"twitter.com",Wf);}v(Dg,vg);
+function Ag(a){if(!a)throw new M("argument-error","credential failed: expected 1 argument (the OAuth access token).");var b=a;r(a)&&(b=a.accessToken);return (new zg).credential({accessToken:b})}function Bg(){O.call(this,"google.com");this.ya("profile");}v(Bg,O);K(Bg,"PROVIDER_ID","google.com");K(Bg,"GOOGLE_SIGN_IN_METHOD","google.com");function Cg(a,b){var c=a;r(a)&&(c=a.idToken,b=a.accessToken);return (new Bg).credential({idToken:c,accessToken:b})}function Dg(){vg.call(this,"twitter.com",Wf);}v(Dg,vg);
 K(Dg,"PROVIDER_ID","twitter.com");K(Dg,"TWITTER_SIGN_IN_METHOD","twitter.com");function Eg(a,b){var c=a;r(c)||(c={oauthToken:a,oauthTokenSecret:b});if(!c.oauthToken||!c.oauthTokenSecret)throw new M("argument-error","credential failed: expected 2 arguments (the OAuth access token and secret).");return new sg("twitter.com",c,"twitter.com")}
 function Fg(a,b,c){this.a=a;this.c=b;K(this,"providerId","password");K(this,"signInMethod",c===Gg.EMAIL_LINK_SIGN_IN_METHOD?Gg.EMAIL_LINK_SIGN_IN_METHOD:Gg.EMAIL_PASSWORD_SIGN_IN_METHOD);}Fg.prototype.na=function(a){return this.signInMethod==Gg.EMAIL_LINK_SIGN_IN_METHOD?P(a,Hg,{email:this.a,oobCode:this.c}):P(a,Ig,{email:this.a,password:this.c})};
 Fg.prototype.b=function(a,b){return this.signInMethod==Gg.EMAIL_LINK_SIGN_IN_METHOD?P(a,Jg,{idToken:b,email:this.a,oobCode:this.c}):P(a,Kg,{idToken:b,email:this.a,password:this.c})};Fg.prototype.f=function(a,b){return kg(this.na(a),b)};Fg.prototype.A=function(){return {email:this.a,password:this.c,signInMethod:this.signInMethod}};function Lg(a){return a&&a.email&&a.password?new Fg(a.email,a.password,a.signInMethod):null}function Gg(){L(this,{providerId:"password",isOAuthProvider:!1});}
-function Mg(a,b){b=Ng(b);if(!b)throw new M("argument-error","Invalid email link!");return new Fg(a,b.code,Gg.EMAIL_LINK_SIGN_IN_METHOD)}function Ng(a){a=ig(a);return (a=yf(a))&&a.operation===hf?a:null}L(Gg,{PROVIDER_ID:"password"});L(Gg,{EMAIL_LINK_SIGN_IN_METHOD:"emailLink"});L(Gg,{EMAIL_PASSWORD_SIGN_IN_METHOD:"password"});function Og(a){if(!(a.Ua&&a.Ta||a.Fa&&a.ba))throw new M("internal-error");this.a=a;K(this,"providerId","phone");K(this,"signInMethod","phone");}Og.prototype.na=function(a){return a.Va(Pg(this))};
-Og.prototype.b=function(a,b){var c=Pg(this);c.idToken=b;return P(a,Qg,c)};Og.prototype.f=function(a,b){var c=Pg(this);c.operation="REAUTH";a=P(a,Rg,c);return kg(a,b)};Og.prototype.A=function(){var a={providerId:"phone"};this.a.Ua&&(a.verificationId=this.a.Ua);this.a.Ta&&(a.verificationCode=this.a.Ta);this.a.Fa&&(a.temporaryProof=this.a.Fa);this.a.ba&&(a.phoneNumber=this.a.ba);return a};
-function Sg(a){if(a&&"phone"===a.providerId&&(a.verificationId&&a.verificationCode||a.temporaryProof&&a.phoneNumber)){var b={};x(["verificationId","verificationCode","temporaryProof","phoneNumber"],function(c){a[c]&&(b[c]=a[c]);});return new Og(b)}return null}function Pg(a){return a.a.Fa&&a.a.ba?{temporaryProof:a.a.Fa,phoneNumber:a.a.ba}:{sessionInfo:a.a.Ua,code:a.a.Ta}}
-function Tg(a){try{this.a=a||firebase.auth();}catch(b){throw new M("argument-error","Either an instance of firebase.auth.Auth must be passed as an argument to the firebase.auth.PhoneAuthProvider constructor, or the default firebase App instance must be initialized via firebase.initializeApp().");}L(this,{providerId:"phone",isOAuthProvider:!1});}
-Tg.prototype.Va=function(a,b){var c=this.a.b;return D(b.verify()).then(function(d){if(!n(d))throw new M("argument-error","An implementation of firebase.auth.ApplicationVerifier.prototype.verify() must return a firebase.Promise that resolves with a string.");switch(b.type){case "recaptcha":return Ug(c,{phoneNumber:a,recaptchaToken:d}).then(function(e){"function"===typeof b.reset&&b.reset();return e},function(e){"function"===typeof b.reset&&b.reset();throw e;});default:throw new M("argument-error",
-'Only firebase.auth.ApplicationVerifiers with type="recaptcha" are currently supported.');}})};function Vg(a,b){if(!a)throw new M("missing-verification-id");if(!b)throw new M("missing-verification-code");return new Og({Ua:a,Ta:b})}L(Tg,{PROVIDER_ID:"phone"});L(Tg,{PHONE_SIGN_IN_METHOD:"phone"});
-function Wg(a){if(a.temporaryProof&&a.phoneNumber)return new Og({Fa:a.temporaryProof,ba:a.phoneNumber});var b=a&&a.providerId;if(!b||"password"===b)return null;var c=a&&a.oauthAccessToken,d=a&&a.oauthTokenSecret,e=a&&a.nonce,f=a&&a.oauthIdToken,g=a&&a.pendingToken;try{switch(b){case "google.com":return Cg(f,c);case "facebook.com":return yg(c);case "github.com":return Ag(c);case "twitter.com":return Eg(c,d);default:return c||d||f||g?g?0==b.indexOf("saml.")?new mg(b,g):new sg(b,{pendingToken:g,idToken:a.oauthIdToken,
+function Mg(a,b){b=Ng(b);if(!b)throw new M("argument-error","Invalid email link!");return new Fg(a,b.code,Gg.EMAIL_LINK_SIGN_IN_METHOD)}function Ng(a){a=ig(a);return (a=yf(a))&&a.operation===hf?a:null}L(Gg,{PROVIDER_ID:"password"});L(Gg,{EMAIL_LINK_SIGN_IN_METHOD:"emailLink"});L(Gg,{EMAIL_PASSWORD_SIGN_IN_METHOD:"password"});function Og(a){if(!(a.Va&&a.Ua||a.Ha&&a.ba))throw new M("internal-error");this.a=a;K(this,"providerId","phone");K(this,"signInMethod","phone");}Og.prototype.na=function(a){return a.Wa(Pg(this))};
+Og.prototype.b=function(a,b){var c=Pg(this);c.idToken=b;return P(a,Qg,c)};Og.prototype.f=function(a,b){var c=Pg(this);c.operation="REAUTH";a=P(a,Rg,c);return kg(a,b)};Og.prototype.A=function(){var a={providerId:"phone"};this.a.Va&&(a.verificationId=this.a.Va);this.a.Ua&&(a.verificationCode=this.a.Ua);this.a.Ha&&(a.temporaryProof=this.a.Ha);this.a.ba&&(a.phoneNumber=this.a.ba);return a};
+function Sg(a){if(a&&"phone"===a.providerId&&(a.verificationId&&a.verificationCode||a.temporaryProof&&a.phoneNumber)){var b={};x(["verificationId","verificationCode","temporaryProof","phoneNumber"],function(c){a[c]&&(b[c]=a[c]);});return new Og(b)}return null}function Pg(a){return a.a.Ha&&a.a.ba?{temporaryProof:a.a.Ha,phoneNumber:a.a.ba}:{sessionInfo:a.a.Va,code:a.a.Ua}}
+function Tg(a){try{this.a=a||firebase$1.auth();}catch(b){throw new M("argument-error","Either an instance of firebase.auth.Auth must be passed as an argument to the firebase.auth.PhoneAuthProvider constructor, or the default firebase App instance must be initialized via firebase.initializeApp().");}L(this,{providerId:"phone",isOAuthProvider:!1});}
+Tg.prototype.Wa=function(a,b){var c=this.a.b;return D(b.verify()).then(function(d){if(!n(d))throw new M("argument-error","An implementation of firebase.auth.ApplicationVerifier.prototype.verify() must return a firebase.Promise that resolves with a string.");switch(b.type){case "recaptcha":return Ug(c,{phoneNumber:a,recaptchaToken:d}).then(function(e){"function"===typeof b.reset&&b.reset();return e},function(e){"function"===typeof b.reset&&b.reset();throw e;});default:throw new M("argument-error",
+'Only firebase.auth.ApplicationVerifiers with type="recaptcha" are currently supported.');}})};function Vg(a,b){if(!a)throw new M("missing-verification-id");if(!b)throw new M("missing-verification-code");return new Og({Va:a,Ua:b})}L(Tg,{PROVIDER_ID:"phone"});L(Tg,{PHONE_SIGN_IN_METHOD:"phone"});
+function Wg(a){if(a.temporaryProof&&a.phoneNumber)return new Og({Ha:a.temporaryProof,ba:a.phoneNumber});var b=a&&a.providerId;if(!b||"password"===b)return null;var c=a&&a.oauthAccessToken,d=a&&a.oauthTokenSecret,e=a&&a.nonce,f=a&&a.oauthIdToken,g=a&&a.pendingToken;try{switch(b){case "google.com":return Cg(f,c);case "facebook.com":return yg(c);case "github.com":return Ag(c);case "twitter.com":return Eg(c,d);default:return c||d||f||g?g?0==b.indexOf("saml.")?new mg(b,g):new sg(b,{pendingToken:g,idToken:a.oauthIdToken,
 accessToken:a.oauthAccessToken},b):(new O(b)).credential({idToken:f,accessToken:c,rawNonce:e}):null}}catch(h){return null}}function Xg(a){if(!a.isOAuthProvider)throw new M("invalid-oauth-provider");}function Yg(a,b,c,d,e,f,g){this.c=a;this.b=b||null;this.g=c||null;this.f=d||null;this.i=f||null;this.h=g||null;this.a=e||null;if(this.g||this.a){if(this.g&&this.a)throw new M("invalid-auth-event");if(this.g&&!this.f)throw new M("invalid-auth-event");}else throw new M("invalid-auth-event");}Yg.prototype.getUid=function(){var a=[];a.push(this.c);this.b&&a.push(this.b);this.f&&a.push(this.f);this.h&&a.push(this.h);return a.join("-")};Yg.prototype.R=function(){return this.h};
 Yg.prototype.A=function(){return {type:this.c,eventId:this.b,urlResponse:this.g,sessionId:this.f,postBody:this.i,tenantId:this.h,error:this.a&&this.a.A()}};function Zg(a){a=a||{};return a.type?new Yg(a.type,a.eventId,a.urlResponse,a.sessionId,a.error&&pf(a.error),a.postBody,a.tenantId):null}function $g(){this.b=null;this.a=[];}var ah=null;function bh(a){var b=ah;b.a.push(a);b.b||(b.b=function(c){for(var d=0;d<b.a.length;d++)b.a[d](c);},a=J("universalLinks.subscribe",l),"function"===typeof a&&a(null,b.b));}function ch(a){var b="unauthorized-domain",c=void 0,d=Ld(a);a=d.b;d=d.f;"chrome-extension"==d?c=Hb("This chrome extension ID (chrome-extension://%s) is not authorized to run this operation. Add it to the OAuth redirect domains list in the Firebase console -> Auth section -> Sign in method tab.",a):"http"==d||"https"==d?c=Hb("This domain (%s) is not authorized to run this operation. Add it to the OAuth redirect domains list in the Firebase console -> Auth section -> Sign in method tab.",a):b="operation-not-supported-in-this-environment";
 M.call(this,b,c);}v(ch,M);function dh(a,b,c){M.call(this,a,c);a=b||{};a.Ab&&K(this,"email",a.Ab);a.ba&&K(this,"phoneNumber",a.ba);a.credential&&K(this,"credential",a.credential);a.Qb&&K(this,"tenantId",a.Qb);}v(dh,M);dh.prototype.A=function(){var a={code:this.code,message:this.message};this.email&&(a.email=this.email);this.phoneNumber&&(a.phoneNumber=this.phoneNumber);this.tenantId&&(a.tenantId=this.tenantId);var b=this.credential&&this.credential.A();b&&Wa(a,b);return a};dh.prototype.toJSON=function(){return this.A()};
@@ -1388,26 +1715,26 @@ function lh(){this.a=new XDomainRequest;this.readyState=0;this.onreadystatechang
 k.send=function(a){if(a)if("string"==typeof a)this.a.send(a);else throw Error("Only string data is supported");else this.a.send();};k.abort=function(){this.a.abort();};k.setRequestHeader=function(){};k.getResponseHeader=function(a){return "content-type"==a.toLowerCase()?this.a.contentType:""};k.fc=function(){this.status=200;this.response=this.responseText=this.a.responseText;mh(this,4);};k.Ib=function(){this.status=500;this.response=this.responseText="";mh(this,4);};k.kc=function(){this.Ib();};
 k.gc=function(){this.status=200;mh(this,1);};function mh(a,b){a.readyState=b;if(a.onreadystatechange)a.onreadystatechange();}k.getAllResponseHeaders=function(){return "content-type: "+this.a.contentType};function nh(a,b,c){this.reset(a,b,c,void 0,void 0);}nh.prototype.a=null;nh.prototype.reset=function(a,b,c,d,e){delete this.a;};function ph(a){this.f=a;this.b=this.c=this.a=null;}function qh(a,b){this.name=a;this.value=b;}qh.prototype.toString=function(){return this.name};var rh=new qh("SEVERE",1E3),sh=new qh("WARNING",900),th=new qh("CONFIG",700),uh=new qh("FINE",500);function vh(a){if(a.c)return a.c;if(a.a)return vh(a.a);ya("Root logger has no level set.");return null}ph.prototype.log=function(a,b,c){if(a.value>=vh(this).value)for(q(b)&&(b=b()),a=new nh(a,String(b),this.f),c&&(a.a=c),c=this;c;)c=c.a;};var wh={},xh=null;
 function yh(a){xh||(xh=new ph(""),wh[""]=xh,xh.c=th);var b;if(!(b=wh[a])){b=new ph(a);var c=a.lastIndexOf("."),d=a.substr(c+1);c=yh(a.substr(0,c));c.b||(c.b={});c.b[d]=b;b.a=c;wh[a]=b;}return b}function zh(a,b){a&&a.log(uh,b,void 0);}function Ah(a){this.f=a;}v(Ah,fh);Ah.prototype.a=function(){return new Bh(this.f)};Ah.prototype.b=function(a){return function(){return a}}({});function Bh(a){G.call(this);this.o=a;this.readyState=Ch;this.status=0;this.responseType=this.responseText=this.response=this.statusText="";this.onreadystatechange=null;this.i=new Headers;this.b=null;this.m="GET";this.g="";this.a=!1;this.h=yh("goog.net.FetchXmlHttp");this.l=this.c=this.f=null;}v(Bh,G);var Ch=0;k=Bh.prototype;
-k.open=function(a,b){if(this.readyState!=Ch)throw this.abort(),Error("Error reopening a connection");this.m=a;this.g=b;this.readyState=1;Dh(this);};k.send=function(a){if(1!=this.readyState)throw this.abort(),Error("need to call open() first. ");this.a=!0;var b={headers:this.i,method:this.m,credentials:void 0,cache:void 0};a&&(b.body=a);this.o.fetch(new Request(this.g,b)).then(this.jc.bind(this),this.Ma.bind(this));};
+k.open=function(a,b){if(this.readyState!=Ch)throw this.abort(),Error("Error reopening a connection");this.m=a;this.g=b;this.readyState=1;Dh(this);};k.send=function(a){if(1!=this.readyState)throw this.abort(),Error("need to call open() first. ");this.a=!0;var b={headers:this.i,method:this.m,credentials:void 0,cache:void 0};a&&(b.body=a);this.o.fetch(new Request(this.g,b)).then(this.jc.bind(this),this.Oa.bind(this));};
 k.abort=function(){this.response=this.responseText="";this.i=new Headers;this.status=0;this.c&&this.c.cancel("Request was aborted.");1<=this.readyState&&this.a&&4!=this.readyState&&(this.a=!1,Eh(this,!1));this.readyState=Ch;};
-k.jc=function(a){this.a&&(this.f=a,this.b||(this.b=a.headers,this.readyState=2,Dh(this)),this.a&&(this.readyState=3,Dh(this),this.a&&("arraybuffer"===this.responseType?a.arrayBuffer().then(this.hc.bind(this),this.Ma.bind(this)):"undefined"!==typeof l.ReadableStream&&"body"in a?(this.response=this.responseText="",this.c=a.body.getReader(),this.l=new TextDecoder,Fh(this)):a.text().then(this.ic.bind(this),this.Ma.bind(this)))));};function Fh(a){a.c.read().then(a.ec.bind(a)).catch(a.Ma.bind(a));}
-k.ec=function(a){if(this.a){var b=this.l.decode(a.value?a.value:new Uint8Array(0),{stream:!a.done});b&&(this.response=this.responseText+=b);a.done?Eh(this,!0):Dh(this);3==this.readyState&&Fh(this);}};k.ic=function(a){this.a&&(this.response=this.responseText=a,Eh(this,!0));};k.hc=function(a){this.a&&(this.response=a,Eh(this,!0));};k.Ma=function(a){var b=this.h;b&&b.log(sh,"Failed to fetch url "+this.g,a instanceof Error?a:Error(a));this.a&&Eh(this,!0);};
+k.jc=function(a){this.a&&(this.f=a,this.b||(this.b=a.headers,this.readyState=2,Dh(this)),this.a&&(this.readyState=3,Dh(this),this.a&&("arraybuffer"===this.responseType?a.arrayBuffer().then(this.hc.bind(this),this.Oa.bind(this)):"undefined"!==typeof l.ReadableStream&&"body"in a?(this.response=this.responseText="",this.c=a.body.getReader(),this.l=new TextDecoder,Fh(this)):a.text().then(this.ic.bind(this),this.Oa.bind(this)))));};function Fh(a){a.c.read().then(a.ec.bind(a)).catch(a.Oa.bind(a));}
+k.ec=function(a){if(this.a){var b=this.l.decode(a.value?a.value:new Uint8Array(0),{stream:!a.done});b&&(this.response=this.responseText+=b);a.done?Eh(this,!0):Dh(this);3==this.readyState&&Fh(this);}};k.ic=function(a){this.a&&(this.response=this.responseText=a,Eh(this,!0));};k.hc=function(a){this.a&&(this.response=a,Eh(this,!0));};k.Oa=function(a){var b=this.h;b&&b.log(sh,"Failed to fetch url "+this.g,a instanceof Error?a:Error(a));this.a&&Eh(this,!0);};
 function Eh(a,b){b&&a.f&&(a.status=a.f.status,a.statusText=a.f.statusText);a.readyState=4;a.f=null;a.c=null;a.l=null;Dh(a);}k.setRequestHeader=function(a,b){this.i.append(a,b);};k.getResponseHeader=function(a){return this.b?this.b.get(a.toLowerCase())||"":((a=this.h)&&a.log(sh,"Attempting to get response header but no headers have been received for url: "+this.g,void 0),"")};
 k.getAllResponseHeaders=function(){if(!this.b){var a=this.h;a&&a.log(sh,"Attempting to get all response headers but no headers have been received for url: "+this.g,void 0);return ""}a=[];for(var b=this.b.entries(),c=b.next();!c.done;)c=c.value,a.push(c[0]+": "+c[1]),c=b.next();return a.join("\r\n")};function Dh(a){a.onreadystatechange&&a.onreadystatechange.call(a);}function Gh(a){G.call(this);this.headers=new rd;this.B=a||null;this.c=!1;this.w=this.a=null;this.h=this.O=this.l="";this.f=this.J=this.i=this.I=!1;this.g=0;this.o=null;this.m=Hh;this.v=this.P=!1;}v(Gh,G);var Hh="";Gh.prototype.b=yh("goog.net.XhrIo");var Ih=/^https?$/i,Jh=["POST","PUT"];
 function Kh(a,b,c,d,e){if(a.a)throw Error("[goog.net.XhrIo] Object is active with another request="+a.l+"; newUri="+b);c=c?c.toUpperCase():"GET";a.l=b;a.h="";a.O=c;a.I=!1;a.c=!0;a.a=a.B?a.B.a():hh.a();a.w=a.B?gh(a.B):gh(hh);a.a.onreadystatechange=t(a.Lb,a);try{zh(a.b,Lh(a,"Opening Xhr")),a.J=!0,a.a.open(c,String(b),!0),a.J=!1;}catch(g){zh(a.b,Lh(a,"Error opening Xhr: "+g.message));Mh(a,g);return}b=d||"";var f=new rd(a.headers);e&&qd(e,function(g,h){f.set(h,g);});e=La(f.X());d=l.FormData&&b instanceof
-l.FormData;!Na(Jh,c)||e||d||f.set("Content-Type","application/x-www-form-urlencoded;charset=utf-8");f.forEach(function(g,h){this.a.setRequestHeader(h,g);},a);a.m&&(a.a.responseType=a.m);"withCredentials"in a.a&&a.a.withCredentials!==a.P&&(a.a.withCredentials=a.P);try{Nh(a),0<a.g&&(a.v=Oh(a.a),zh(a.b,Lh(a,"Will abort after "+a.g+"ms if incomplete, xhr2 "+a.v)),a.v?(a.a.timeout=a.g,a.a.ontimeout=t(a.Ga,a)):a.o=md(a.Ga,a.g,a)),zh(a.b,Lh(a,"Sending request")),a.i=!0,a.a.send(b),a.i=!1;}catch(g){zh(a.b,
-Lh(a,"Send error: "+g.message)),Mh(a,g);}}function Oh(a){return uc&&Ec(9)&&"number"==typeof a.timeout&&void 0!==a.ontimeout}function Ma(a){return "content-type"==a.toLowerCase()}k=Gh.prototype;k.Ga=function(){"undefined"!=typeof fa&&this.a&&(this.h="Timed out after "+this.g+"ms, aborting",zh(this.b,Lh(this,this.h)),this.dispatchEvent("timeout"),this.abort(8));};function Mh(a,b){a.c=!1;a.a&&(a.f=!0,a.a.abort(),a.f=!1);a.h=b;Ph(a);Qh(a);}
-function Ph(a){a.I||(a.I=!0,a.dispatchEvent("complete"),a.dispatchEvent("error"));}k.abort=function(){this.a&&this.c&&(zh(this.b,Lh(this,"Aborting")),this.c=!1,this.f=!0,this.a.abort(),this.f=!1,this.dispatchEvent("complete"),this.dispatchEvent("abort"),Qh(this));};k.xa=function(){this.a&&(this.c&&(this.c=!1,this.f=!0,this.a.abort(),this.f=!1),Qh(this,!0));Gh.qb.xa.call(this);};k.Lb=function(){this.ta||(this.J||this.i||this.f?Rh(this):this.yc());};k.yc=function(){Rh(this);};
+l.FormData;!Na(Jh,c)||e||d||f.set("Content-Type","application/x-www-form-urlencoded;charset=utf-8");f.forEach(function(g,h){this.a.setRequestHeader(h,g);},a);a.m&&(a.a.responseType=a.m);"withCredentials"in a.a&&a.a.withCredentials!==a.P&&(a.a.withCredentials=a.P);try{Nh(a),0<a.g&&(a.v=Oh(a.a),zh(a.b,Lh(a,"Will abort after "+a.g+"ms if incomplete, xhr2 "+a.v)),a.v?(a.a.timeout=a.g,a.a.ontimeout=t(a.Ia,a)):a.o=md(a.Ia,a.g,a)),zh(a.b,Lh(a,"Sending request")),a.i=!0,a.a.send(b),a.i=!1;}catch(g){zh(a.b,
+Lh(a,"Send error: "+g.message)),Mh(a,g);}}function Oh(a){return uc&&Ec(9)&&"number"==typeof a.timeout&&void 0!==a.ontimeout}function Ma(a){return "content-type"==a.toLowerCase()}k=Gh.prototype;k.Ia=function(){"undefined"!=typeof fa&&this.a&&(this.h="Timed out after "+this.g+"ms, aborting",zh(this.b,Lh(this,this.h)),this.dispatchEvent("timeout"),this.abort(8));};function Mh(a,b){a.c=!1;a.a&&(a.f=!0,a.a.abort(),a.f=!1);a.h=b;Ph(a);Qh(a);}
+function Ph(a){a.I||(a.I=!0,a.dispatchEvent("complete"),a.dispatchEvent("error"));}k.abort=function(){this.a&&this.c&&(zh(this.b,Lh(this,"Aborting")),this.c=!1,this.f=!0,this.a.abort(),this.f=!1,this.dispatchEvent("complete"),this.dispatchEvent("abort"),Qh(this));};k.za=function(){this.a&&(this.c&&(this.c=!1,this.f=!0,this.a.abort(),this.f=!1),Qh(this,!0));Gh.qb.za.call(this);};k.Lb=function(){this.va||(this.J||this.i||this.f?Rh(this):this.yc());};k.yc=function(){Rh(this);};
 function Rh(a){if(a.c&&"undefined"!=typeof fa)if(a.w[1]&&4==Sh(a)&&2==Th(a))zh(a.b,Lh(a,"Local request error detected and ignored"));else if(a.i&&4==Sh(a))md(a.Lb,0,a);else if(a.dispatchEvent("readystatechange"),4==Sh(a)){zh(a.b,Lh(a,"Request complete"));a.c=!1;try{var b=Th(a);a:switch(b){case 200:case 201:case 202:case 204:case 206:case 304:case 1223:var c=!0;break a;default:c=!1;}var d;if(!(d=c)){var e;if(e=0===b){var f=String(a.l).match(ud)[1]||null;if(!f&&l.self&&l.self.location){var g=l.self.location.protocol;
 f=g.substr(0,g.length-1);}e=!Ih.test(f?f.toLowerCase():"");}d=e;}if(d)a.dispatchEvent("complete"),a.dispatchEvent("success");else{try{var h=2<Sh(a)?a.a.statusText:"";}catch(m){zh(a.b,"Can not get status: "+m.message),h="";}a.h=h+" ["+Th(a)+"]";Ph(a);}}finally{Qh(a);}}}function Qh(a,b){if(a.a){Nh(a);var c=a.a,d=a.w[0]?ka:null;a.a=null;a.w=null;b||a.dispatchEvent("ready");try{c.onreadystatechange=d;}catch(e){(a=a.b)&&a.log(rh,"Problem encountered resetting onreadystatechange: "+e.message,void 0);}}}
 function Nh(a){a.a&&a.v&&(a.a.ontimeout=null);a.o&&(l.clearTimeout(a.o),a.o=null);}function Sh(a){return a.a?a.a.readyState:0}function Th(a){try{return 2<Sh(a)?a.a.status:-1}catch(b){return -1}}function Uh(a){try{return a.a?a.a.responseText:""}catch(b){return zh(a.b,"Can not get responseText: "+b.message),""}}
 k.getResponse=function(){try{if(!this.a)return null;if("response"in this.a)return this.a.response;switch(this.m){case Hh:case "text":return this.a.responseText;case "arraybuffer":if("mozResponseArrayBuffer"in this.a)return this.a.mozResponseArrayBuffer}var a=this.b;a&&a.log(rh,"Response type "+this.m+" is not supported on this browser",void 0);return null}catch(b){return zh(this.b,"Can not get response: "+b.message),null}};function Lh(a,b){return b+" ["+a.O+" "+a.l+" "+Th(a)+"]"}function Vh(a){var b=Wh;this.g=[];this.v=b;this.o=a||null;this.f=this.a=!1;this.c=void 0;this.u=this.w=this.i=!1;this.h=0;this.b=null;this.l=0;}Vh.prototype.cancel=function(a){if(this.a)this.c instanceof Vh&&this.c.cancel();else{if(this.b){var b=this.b;delete this.b;a?b.cancel(a):(b.l--,0>=b.l&&b.cancel());}this.v?this.v.call(this.o,this):this.u=!0;this.a||(a=new Xh(this),Yh(this),Zh(this,!1,a));}};Vh.prototype.m=function(a,b){this.i=!1;Zh(this,a,b);};function Zh(a,b,c){a.a=!0;a.c=c;a.f=!b;$h(a);}
 function Yh(a){if(a.a){if(!a.u)throw new ai(a);a.u=!1;}}function bi(a,b){ci(a,null,b,void 0);}function ci(a,b,c,d){a.g.push([b,c,d]);a.a&&$h(a);}Vh.prototype.then=function(a,b,c){var d,e,f=new B(function(g,h){d=g;e=h;});ci(this,d,function(g){g instanceof Xh?f.cancel():e(g);});return f.then(a,b,c)};Vh.prototype.$goog_Thenable=!0;function di(a){return Ka(a.g,function(b){return q(b[1])})}
 function $h(a){if(a.h&&a.a&&di(a)){var b=a.h,c=ei[b];c&&(l.clearTimeout(c.a),delete ei[b]);a.h=0;}a.b&&(a.b.l--,delete a.b);b=a.c;for(var d=c=!1;a.g.length&&!a.i;){var e=a.g.shift(),f=e[0],g=e[1];e=e[2];if(f=a.f?g:f)try{var h=f.call(e||a.o,b);void 0!==h&&(a.f=a.f&&(h==b||h instanceof Error),a.c=b=h);if(va(b)||"function"===typeof l.Promise&&b instanceof l.Promise)d=!0,a.i=!0;}catch(m){b=m,a.f=!0,di(a)||(c=!0);}}a.c=b;d&&(h=t(a.m,a,!0),d=t(a.m,a,!1),b instanceof Vh?(ci(b,h,d),b.w=!0):b.then(h,d));c&&(b=
-new fi(b),ei[b.a]=b,a.h=b.a);}function ai(){w.call(this);}v(ai,w);ai.prototype.message="Deferred has already fired";ai.prototype.name="AlreadyCalledError";function Xh(){w.call(this);}v(Xh,w);Xh.prototype.message="Deferred was canceled";Xh.prototype.name="CanceledError";function fi(a){this.a=l.setTimeout(t(this.c,this),0);this.b=a;}fi.prototype.c=function(){delete ei[this.a];throw this.b;};var ei={};function gi(a){var c=document,d=db(a).toString(),e=document.createElement("SCRIPT"),f={Nb:e,Ga:void 0},g=new Vh(f),h=null,m=5E3;(h=window.setTimeout(function(){hi(e,!0);var p=new ii(ji,"Timeout reached for loading script "+d);Yh(g);Zh(g,!1,p);},m),f.Ga=h);e.onload=e.onreadystatechange=function(){e.readyState&&"loaded"!=e.readyState&&"complete"!=e.readyState||(hi(e,!1,h),Yh(g),Zh(g,!0,null));};e.onerror=function(){hi(e,!0,h);var p=new ii(ki,"Error while loading script "+
-d);Yh(g);Zh(g,!1,p);};f={};Wa(f,{type:"text/javascript",charset:"UTF-8"});Wd(e,f);Gb(e,a);li(c).appendChild(e);return g}function li(a){var b;return (b=(a||document).getElementsByTagName("HEAD"))&&0!=b.length?b[0]:a.documentElement}function Wh(){if(this&&this.Nb){var a=this.Nb;a&&"SCRIPT"==a.tagName&&hi(a,!0,this.Ga);}}
+new fi(b),ei[b.a]=b,a.h=b.a);}function ai(){w.call(this);}v(ai,w);ai.prototype.message="Deferred has already fired";ai.prototype.name="AlreadyCalledError";function Xh(){w.call(this);}v(Xh,w);Xh.prototype.message="Deferred was canceled";Xh.prototype.name="CanceledError";function fi(a){this.a=l.setTimeout(t(this.c,this),0);this.b=a;}fi.prototype.c=function(){delete ei[this.a];throw this.b;};var ei={};function gi(a){var c=document,d=db(a).toString(),e=document.createElement("SCRIPT"),f={Nb:e,Ia:void 0},g=new Vh(f),h=null,m=5E3;(h=window.setTimeout(function(){hi(e,!0);var p=new ii(ji,"Timeout reached for loading script "+d);Yh(g);Zh(g,!1,p);},m),f.Ia=h);e.onload=e.onreadystatechange=function(){e.readyState&&"loaded"!=e.readyState&&"complete"!=e.readyState||(hi(e,!1,h),Yh(g),Zh(g,!0,null));};e.onerror=function(){hi(e,!0,h);var p=new ii(ki,"Error while loading script "+
+d);Yh(g);Zh(g,!1,p);};f={};Wa(f,{type:"text/javascript",charset:"UTF-8"});Wd(e,f);Gb(e,a);li(c).appendChild(e);return g}function li(a){var b;return (b=(a||document).getElementsByTagName("HEAD"))&&0!=b.length?b[0]:a.documentElement}function Wh(){if(this&&this.Nb){var a=this.Nb;a&&"SCRIPT"==a.tagName&&hi(a,!0,this.Ia);}}
 function hi(a,b,c){null!=c&&l.clearTimeout(c);a.onload=ka;a.onerror=ka;a.onreadystatechange=ka;b&&window.setTimeout(function(){a&&a.parentNode&&a.parentNode.removeChild(a);},0);}var ki=0,ji=1;function ii(a,b){var c="Jsloader error (code #"+a+")";b&&(c+=": "+b);w.call(this,c);this.code=a;}v(ii,w);function mi(a){this.f=a;}v(mi,fh);mi.prototype.a=function(){return new this.f};mi.prototype.b=function(){return {}};
-function ni(a,b,c){this.c=a;a=b||{};this.l=a.secureTokenEndpoint||"https://securetoken.googleapis.com/v1/token";this.u=a.secureTokenTimeout||oi;this.g=Ua(a.secureTokenHeaders||pi);this.h=a.firebaseEndpoint||"https://www.googleapis.com/identitytoolkit/v3/relyingparty/";this.i=a.firebaseTimeout||qi;this.a=Ua(a.firebaseHeaders||ri);c&&(this.a["X-Client-Version"]=c,this.g["X-Client-Version"]=c);c="Node"==Ae();c=l.XMLHttpRequest||c&&firebase.INTERNAL.node&&firebase.INTERNAL.node.XMLHttpRequest;if(!c&&
+function ni(a,b,c){this.c=a;a=b||{};this.l=a.secureTokenEndpoint||"https://securetoken.googleapis.com/v1/token";this.u=a.secureTokenTimeout||oi;this.g=Ua(a.secureTokenHeaders||pi);this.h=a.firebaseEndpoint||"https://www.googleapis.com/identitytoolkit/v3/relyingparty/";this.i=a.firebaseTimeout||qi;this.a=Ua(a.firebaseHeaders||ri);c&&(this.a["X-Client-Version"]=c,this.g["X-Client-Version"]=c);c="Node"==Ae();c=l.XMLHttpRequest||c&&firebase$1.INTERNAL.node&&firebase$1.INTERNAL.node.XMLHttpRequest;if(!c&&
 !ze())throw new M("internal-error","The XMLHttpRequest compatibility library was not found.");this.f=void 0;ze()?this.f=new Ah(self):Be()?this.f=new mi(c):this.f=new kh;this.b=null;}var si,lg="idToken",oi=new Pe(3E4,6E4),pi={"Content-Type":"application/x-www-form-urlencoded"},qi=new Pe(3E4,6E4),ri={"Content-Type":"application/json"};function ti(a,b){b?a.a["X-Firebase-Locale"]=b:delete a.a["X-Firebase-Locale"];}
 function ui(a,b){b?(a.a["X-Client-Version"]=b,a.g["X-Client-Version"]=b):(delete a.a["X-Client-Version"],delete a.g["X-Client-Version"]);}ni.prototype.R=function(){return this.b};function vi(a,b,c,d,e,f,g){ke()||ze()?a=t(a.o,a):(si||(si=new B(function(h,m){wi(h,m);})),a=t(a.m,a));a(b,c,d,e,f,g);}
 ni.prototype.o=function(a,b,c,d,e,f){if(ze()&&("undefined"===typeof l.fetch||"undefined"===typeof l.Headers||"undefined"===typeof l.Request))throw new M("operation-not-supported-in-this-environment","fetch, Headers and Request native APIs or equivalent Polyfills must be available to support HTTP requests from a Worker environment.");var g=new Gh(this.f);if(f){g.g=Math.max(0,f);var h=setTimeout(function(){g.dispatchEvent("timeout");},f);}Zc(g,"complete",function(){h&&clearTimeout(h);var m=null;try{m=
@@ -1418,37 +1745,37 @@ function zi(a,b){return new B(function(c,d){"refresh_token"==b.grant_type&&b.ref
 function Bi(a,b,c,d,e,f){var g=Ld(a.h+b);H(g,"key",a.c);f&&H(g,"cb",ua().toString());var h="GET"==c;if(h)for(var m in d)d.hasOwnProperty(m)&&H(g,m,d[m]);return new B(function(p,u){vi(a,g.toString(),function(A){A?A.error?u(Ai(A,e||{})):p(A):u(new M("network-request-failed"));},c,h?void 0:ae(Le(d)),a.a,a.i.get());})}function Ci(a){a=a.email;if(!n(a)||!te.test(a))throw new M("invalid-email");}function Di(a){"email"in a&&Ci(a);}
 function Ei(a,b){return P(a,Fi,{identifier:b,continueUri:Ie()?he():"http://localhost"}).then(function(c){return c.signinMethods||[]})}function Gi(a){return P(a,Hi,{}).then(function(b){return b.authorizedDomains||[]})}function Ii(a){if(!a[lg])throw new M("internal-error");}
 function Ji(a){if(a.phoneNumber||a.temporaryProof){if(!a.phoneNumber||!a.temporaryProof)throw new M("internal-error");}else{if(!a.sessionInfo)throw new M("missing-verification-id");if(!a.code)throw new M("missing-verification-code");}}ni.prototype.ob=function(){return P(this,Ki,{})};ni.prototype.rb=function(a,b){return P(this,Li,{idToken:a,email:b})};ni.prototype.sb=function(a,b){return P(this,Kg,{idToken:a,password:b})};var Mi={displayName:"DISPLAY_NAME",photoUrl:"PHOTO_URL"};k=ni.prototype;
-k.tb=function(a,b){var c={idToken:a},d=[];Sa(Mi,function(e,f){var g=b[f];null===g?d.push(e):f in b&&(c[f]=g);});d.length&&(c.deleteAttribute=d);return P(this,Li,c)};k.kb=function(a,b){a={requestType:"PASSWORD_RESET",email:a};Wa(a,b);return P(this,Ni,a)};k.lb=function(a,b){a={requestType:"EMAIL_SIGNIN",email:a};Wa(a,b);return P(this,Oi,a)};k.jb=function(a,b){a={requestType:"VERIFY_EMAIL",idToken:a};Wa(a,b);return P(this,Pi,a)};function Ug(a,b){return P(a,Qi,b)}k.Va=function(a){return P(this,Ri,a)};
+k.tb=function(a,b){var c={idToken:a},d=[];Sa(Mi,function(e,f){var g=b[f];null===g?d.push(e):f in b&&(c[f]=g);});d.length&&(c.deleteAttribute=d);return P(this,Li,c)};k.kb=function(a,b){a={requestType:"PASSWORD_RESET",email:a};Wa(a,b);return P(this,Ni,a)};k.lb=function(a,b){a={requestType:"EMAIL_SIGNIN",email:a};Wa(a,b);return P(this,Oi,a)};k.jb=function(a,b){a={requestType:"VERIFY_EMAIL",idToken:a};Wa(a,b);return P(this,Pi,a)};function Ug(a,b){return P(a,Qi,b)}k.Wa=function(a){return P(this,Ri,a)};
 function Si(a,b,c){return P(a,Ti,{idToken:b,deleteProvider:c})}function Ui(a){if(!a.requestUri||!a.sessionId&&!a.postBody&&!a.pendingToken)throw new M("internal-error");}function Vi(a,b){b.oauthIdToken&&b.providerId&&0==b.providerId.indexOf("oidc.")&&!b.pendingToken&&(a.sessionId?b.nonce=a.sessionId:a.postBody&&(a=new Cd(a.postBody),Td(a,"nonce")&&(b.nonce=a.get("nonce"))));return b}
 function Wi(a){var b=null;a.needConfirmation?(a.code="account-exists-with-different-credential",b=eh(a)):"FEDERATED_USER_ID_ALREADY_LINKED"==a.errorMessage?(a.code="credential-already-in-use",b=eh(a)):"EMAIL_EXISTS"==a.errorMessage?(a.code="email-already-in-use",b=eh(a)):a.errorMessage&&(b=Xi(a.errorMessage));if(b)throw b;if(!a[lg])throw new M("internal-error");}function ng(a,b){b.returnIdpCredential=!0;return P(a,Yi,b)}function pg(a,b){b.returnIdpCredential=!0;return P(a,Zi,b)}
-function qg(a,b){b.returnIdpCredential=!0;b.autoCreate=!1;return P(a,$i,b)}function aj(a){if(!a.oobCode)throw new M("invalid-action-code");}k.$a=function(a,b){return P(this,bj,{oobCode:a,newPassword:b})};k.Ka=function(a){return P(this,cj,{oobCode:a})};k.Xa=function(a){return P(this,dj,{oobCode:a})};
+function qg(a,b){b.returnIdpCredential=!0;b.autoCreate=!1;return P(a,$i,b)}function aj(a){if(!a.oobCode)throw new M("invalid-action-code");}k.ab=function(a,b){return P(this,bj,{oobCode:a,newPassword:b})};k.Ma=function(a){return P(this,cj,{oobCode:a})};k.Ya=function(a){return P(this,dj,{oobCode:a})};
 var dj={endpoint:"setAccountInfo",D:aj,fa:"email",F:!0},cj={endpoint:"resetPassword",D:aj,K:function(a){var b=a.requestType;if(!b||!a.email&&"EMAIL_SIGNIN"!=b)throw new M("internal-error");},F:!0},ej={endpoint:"signupNewUser",D:function(a){Ci(a);if(!a.password)throw new M("weak-password");},K:Ii,T:!0,F:!0},Fi={endpoint:"createAuthUri",F:!0},fj={endpoint:"deleteAccount",V:["idToken"]},Ti={endpoint:"setAccountInfo",V:["idToken","deleteProvider"],D:function(a){if(!na(a.deleteProvider))throw new M("internal-error");
 }},Hg={endpoint:"emailLinkSignin",V:["email","oobCode"],D:Ci,K:Ii,T:!0,F:!0},Jg={endpoint:"emailLinkSignin",V:["idToken","email","oobCode"],D:Ci,K:Ii,T:!0},gj={endpoint:"getAccountInfo"},Oi={endpoint:"getOobConfirmationCode",V:["requestType"],D:function(a){if("EMAIL_SIGNIN"!=a.requestType)throw new M("internal-error");Ci(a);},fa:"email",F:!0},Pi={endpoint:"getOobConfirmationCode",V:["idToken","requestType"],D:function(a){if("VERIFY_EMAIL"!=a.requestType)throw new M("internal-error");},fa:"email",F:!0},
 Ni={endpoint:"getOobConfirmationCode",V:["requestType"],D:function(a){if("PASSWORD_RESET"!=a.requestType)throw new M("internal-error");Ci(a);},fa:"email",F:!0},Hi={wb:!0,endpoint:"getProjectConfig",Kb:"GET"},hj={wb:!0,endpoint:"getRecaptchaParam",Kb:"GET",K:function(a){if(!a.recaptchaSiteKey)throw new M("internal-error");}},bj={endpoint:"resetPassword",D:aj,fa:"email",F:!0},Qi={endpoint:"sendVerificationCode",V:["phoneNumber","recaptchaToken"],fa:"sessionInfo",F:!0},Li={endpoint:"setAccountInfo",V:["idToken"],
-D:Di,T:!0},Kg={endpoint:"setAccountInfo",V:["idToken"],D:function(a){Di(a);if(!a.password)throw new M("weak-password");},K:Ii,T:!0},Ki={endpoint:"signupNewUser",K:Ii,T:!0,F:!0},Yi={endpoint:"verifyAssertion",D:Ui,Qa:Vi,K:Wi,T:!0,F:!0},$i={endpoint:"verifyAssertion",D:Ui,Qa:Vi,K:function(a){if(a.errorMessage&&"USER_NOT_FOUND"==a.errorMessage)throw new M("user-not-found");if(a.errorMessage)throw Xi(a.errorMessage);if(!a[lg])throw new M("internal-error");},T:!0,F:!0},Zi={endpoint:"verifyAssertion",D:function(a){Ui(a);
-if(!a.idToken)throw new M("internal-error");},Qa:Vi,K:Wi,T:!0},ij={endpoint:"verifyCustomToken",D:function(a){if(!a.token)throw new M("invalid-custom-token");},K:Ii,T:!0,F:!0},Ig={endpoint:"verifyPassword",D:function(a){Ci(a);if(!a.password)throw new M("wrong-password");},K:Ii,T:!0,F:!0},Ri={endpoint:"verifyPhoneNumber",D:Ji,K:Ii,F:!0},Qg={endpoint:"verifyPhoneNumber",D:function(a){if(!a.idToken)throw new M("internal-error");Ji(a);},K:function(a){if(a.temporaryProof)throw a.code="credential-already-in-use",
+D:Di,T:!0},Kg={endpoint:"setAccountInfo",V:["idToken"],D:function(a){Di(a);if(!a.password)throw new M("weak-password");},K:Ii,T:!0},Ki={endpoint:"signupNewUser",K:Ii,T:!0,F:!0},Yi={endpoint:"verifyAssertion",D:Ui,Ra:Vi,K:Wi,T:!0,F:!0},$i={endpoint:"verifyAssertion",D:Ui,Ra:Vi,K:function(a){if(a.errorMessage&&"USER_NOT_FOUND"==a.errorMessage)throw new M("user-not-found");if(a.errorMessage)throw Xi(a.errorMessage);if(!a[lg])throw new M("internal-error");},T:!0,F:!0},Zi={endpoint:"verifyAssertion",D:function(a){Ui(a);
+if(!a.idToken)throw new M("internal-error");},Ra:Vi,K:Wi,T:!0},ij={endpoint:"verifyCustomToken",D:function(a){if(!a.token)throw new M("invalid-custom-token");},K:Ii,T:!0,F:!0},Ig={endpoint:"verifyPassword",D:function(a){Ci(a);if(!a.password)throw new M("wrong-password");},K:Ii,T:!0,F:!0},Ri={endpoint:"verifyPhoneNumber",D:Ji,K:Ii,F:!0},Qg={endpoint:"verifyPhoneNumber",D:function(a){if(!a.idToken)throw new M("internal-error");Ji(a);},K:function(a){if(a.temporaryProof)throw a.code="credential-already-in-use",
 eh(a);Ii(a);}},Rg={Yb:{USER_NOT_FOUND:"user-not-found"},endpoint:"verifyPhoneNumber",D:Ji,K:Ii,F:!0};
-function P(a,b,c){if(!bf(c,b.V))return E(new M("internal-error"));var d=b.Kb||"POST",e;return D(c).then(b.D).then(function(){b.T&&(c.returnSecureToken=!0);b.F&&a.b&&"undefined"===typeof c.tenantId&&(c.tenantId=a.b);return Bi(a,b.endpoint,d,c,b.Yb,b.wb||!1)}).then(function(f){e=f;return b.Qa?b.Qa(c,e):e}).then(b.K).then(function(){if(!b.fa)return e;if(!(b.fa in e))throw new M("internal-error");return e[b.fa]})}function Xi(a){return Ai({error:{errors:[{message:a}],code:400,message:a}})}
+function P(a,b,c){if(!bf(c,b.V))return E(new M("internal-error"));var d=b.Kb||"POST",e;return D(c).then(b.D).then(function(){b.T&&(c.returnSecureToken=!0);b.F&&a.b&&"undefined"===typeof c.tenantId&&(c.tenantId=a.b);return Bi(a,b.endpoint,d,c,b.Yb,b.wb||!1)}).then(function(f){e=f;return b.Ra?b.Ra(c,e):e}).then(b.K).then(function(){if(!b.fa)return e;if(!(b.fa in e))throw new M("internal-error");return e[b.fa]})}function Xi(a){return Ai({error:{errors:[{message:a}],code:400,message:a}})}
 function Ai(a,b){var c=(a.error&&a.error.errors&&a.error.errors[0]||{}).reason||"";var d={keyInvalid:"invalid-api-key",ipRefererBlocked:"app-not-authorized"};if(c=d[c]?new M(d[c]):null)return c;c=a.error&&a.error.message||"";d={INVALID_CUSTOM_TOKEN:"invalid-custom-token",CREDENTIAL_MISMATCH:"custom-token-mismatch",MISSING_CUSTOM_TOKEN:"internal-error",INVALID_IDENTIFIER:"invalid-email",MISSING_CONTINUE_URI:"internal-error",INVALID_EMAIL:"invalid-email",INVALID_PASSWORD:"wrong-password",USER_DISABLED:"user-disabled",
 MISSING_PASSWORD:"internal-error",EMAIL_EXISTS:"email-already-in-use",PASSWORD_LOGIN_DISABLED:"operation-not-allowed",INVALID_IDP_RESPONSE:"invalid-credential",INVALID_PENDING_TOKEN:"invalid-credential",FEDERATED_USER_ID_ALREADY_LINKED:"credential-already-in-use",MISSING_OR_INVALID_NONCE:"missing-or-invalid-nonce",INVALID_MESSAGE_PAYLOAD:"invalid-message-payload",INVALID_RECIPIENT_EMAIL:"invalid-recipient-email",INVALID_SENDER:"invalid-sender",EMAIL_NOT_FOUND:"user-not-found",RESET_PASSWORD_EXCEED_LIMIT:"too-many-requests",
 EXPIRED_OOB_CODE:"expired-action-code",INVALID_OOB_CODE:"invalid-action-code",MISSING_OOB_CODE:"internal-error",INVALID_PROVIDER_ID:"invalid-provider-id",CREDENTIAL_TOO_OLD_LOGIN_AGAIN:"requires-recent-login",INVALID_ID_TOKEN:"invalid-user-token",TOKEN_EXPIRED:"user-token-expired",USER_NOT_FOUND:"user-token-expired",CORS_UNSUPPORTED:"cors-unsupported",DYNAMIC_LINK_NOT_ACTIVATED:"dynamic-link-not-activated",INVALID_APP_ID:"invalid-app-id",TOO_MANY_ATTEMPTS_TRY_LATER:"too-many-requests",WEAK_PASSWORD:"weak-password",
 OPERATION_NOT_ALLOWED:"operation-not-allowed",USER_CANCELLED:"user-cancelled",CAPTCHA_CHECK_FAILED:"captcha-check-failed",INVALID_APP_CREDENTIAL:"invalid-app-credential",INVALID_CODE:"invalid-verification-code",INVALID_PHONE_NUMBER:"invalid-phone-number",INVALID_SESSION_INFO:"invalid-verification-id",INVALID_TEMPORARY_PROOF:"invalid-credential",MISSING_APP_CREDENTIAL:"missing-app-credential",MISSING_CODE:"missing-verification-code",MISSING_PHONE_NUMBER:"missing-phone-number",MISSING_SESSION_INFO:"missing-verification-id",
 QUOTA_EXCEEDED:"quota-exceeded",SESSION_EXPIRED:"code-expired",REJECTED_CREDENTIAL:"rejected-credential",INVALID_CONTINUE_URI:"invalid-continue-uri",MISSING_ANDROID_PACKAGE_NAME:"missing-android-pkg-name",MISSING_IOS_BUNDLE_ID:"missing-ios-bundle-id",UNAUTHORIZED_DOMAIN:"unauthorized-continue-uri",INVALID_DYNAMIC_LINK_DOMAIN:"invalid-dynamic-link-domain",INVALID_OAUTH_CLIENT_ID:"invalid-oauth-client-id",INVALID_CERT_HASH:"invalid-cert-hash",UNSUPPORTED_TENANT_OPERATION:"unsupported-tenant-operation",
-INVALID_TENANT_ID:"invalid-tenant-id",ADMIN_ONLY_OPERATION:"admin-restricted-operation"};Wa(d,b||{});b=(b=c.match(/^[^\s]+\s*:\s*(.*)$/))&&1<b.length?b[1]:void 0;for(var e in d)if(0===c.indexOf(e))return new M(d[e],b);!b&&a&&(b=Ke(a));return new M("internal-error",b)}function jj(a){this.b=a;this.a=null;this.fb=kj(this);}
+INVALID_TENANT_ID:"invalid-tenant-id",TENANT_ID_MISMATCH:"tenant-id-mismatch",ADMIN_ONLY_OPERATION:"admin-restricted-operation"};Wa(d,b||{});b=(b=c.match(/^[^\s]+\s*:\s*([\s\S]*)$/))&&1<b.length?b[1]:void 0;for(var e in d)if(0===c.indexOf(e))return new M(d[e],b);!b&&a&&(b=Ke(a));return new M("internal-error",b)}function jj(a){this.b=a;this.a=null;this.gb=kj(this);}
 function kj(a){return lj().then(function(){return new B(function(b,c){J("gapi.iframes.getContext")().open({where:document.body,url:a.b,messageHandlersFilter:J("gapi.iframes.CROSS_ORIGIN_IFRAMES_FILTER"),attributes:{style:{position:"absolute",top:"-100px",width:"1px",height:"1px"}},dontclear:!0},function(d){function e(){clearTimeout(f);b();}a.a=d;a.a.restyle({setHideOnLeave:!1});var f=setTimeout(function(){c(Error("Network Error"));},mj.get());d.ping(e).then(e,function(){c(Error("Network Error"));});});})})}
-function nj(a,b){return a.fb.then(function(){return new B(function(c){a.a.send(b.type,b,c,J("gapi.iframes.CROSS_ORIGIN_IFRAMES_FILTER"));})})}function oj(a,b){a.fb.then(function(){a.a.register("authEvent",b,J("gapi.iframes.CROSS_ORIGIN_IFRAMES_FILTER"));});}var pj=new Xa(Ya,"https://apis.google.com/js/api.js?onload=%{onload}"),qj=new Pe(3E4,6E4),mj=new Pe(5E3,15E3),rj=null;
+function nj(a,b){return a.gb.then(function(){return new B(function(c){a.a.send(b.type,b,c,J("gapi.iframes.CROSS_ORIGIN_IFRAMES_FILTER"));})})}function oj(a,b){a.gb.then(function(){a.a.register("authEvent",b,J("gapi.iframes.CROSS_ORIGIN_IFRAMES_FILTER"));});}var pj=new Xa(Ya,"https://apis.google.com/js/api.js?onload=%{onload}"),qj=new Pe(3E4,6E4),mj=new Pe(5E3,15E3),rj=null;
 function lj(){return rj?rj:rj=(new B(function(a,b){function c(){Oe();J("gapi.load")("gapi.iframes",{callback:a,ontimeout:function(){Oe();b(Error("Network Error"));},timeout:qj.get()});}if(J("gapi.iframes.Iframe"))a();else if(J("gapi.load"))c();else{var d="__iframefcb"+Math.floor(1E6*Math.random()).toString();l[d]=function(){J("gapi.load")?c():b(Error("Network Error"));};d=eb(pj,{onload:d});D(gi(d)).s(function(){b(Error("Network Error"));});}})).s(function(a){rj=null;throw a;})}function sj(a,b,c){this.i=a;this.g=b;this.h=c;this.f=null;this.a=Md(this.i,"/__/auth/iframe");H(this.a,"apiKey",this.g);H(this.a,"appName",this.h);this.b=null;this.c=[];}sj.prototype.toString=function(){this.f?H(this.a,"v",this.f):Sd(this.a.a,"v");this.b?H(this.a,"eid",this.b):Sd(this.a.a,"eid");this.c.length?H(this.a,"fw",this.c.join(",")):Sd(this.a.a,"fw");return this.a.toString()};function tj(a,b,c,d,e){this.o=a;this.m=b;this.c=c;this.u=d;this.i=this.g=this.l=null;this.a=e;this.h=this.f=null;}
 tj.prototype.nb=function(a){this.h=a;return this};
-tj.prototype.toString=function(){var a=Md(this.o,"/__/auth/handler");H(a,"apiKey",this.m);H(a,"appName",this.c);H(a,"authType",this.u);if(this.a.isOAuthProvider){var b=this.a;try{var c=firebase.app(this.c).auth().ha();}catch(h){c=null;}b.ab=c;H(a,"providerId",this.a.providerId);b=this.a;c=Le(b.zb);for(var d in c)c[d]=c[d].toString();d=b.Fc;c=Ua(c);for(var e=0;e<d.length;e++){var f=d[e];f in c&&delete c[f];}b.cb&&b.ab&&!c[b.cb]&&(c[b.cb]=b.ab);Ta(c)||H(a,"customParameters",Ke(c));}"function"===typeof this.a.Hb&&
-(b=this.a.Hb(),b.length&&H(a,"scopes",b.join(",")));this.l?H(a,"redirectUrl",this.l):Sd(a.a,"redirectUrl");this.g?H(a,"eventId",this.g):Sd(a.a,"eventId");this.i?H(a,"v",this.i):Sd(a.a,"v");if(this.b)for(var g in this.b)this.b.hasOwnProperty(g)&&!Kd(a,g)&&H(a,g,this.b[g]);this.h?H(a,"tid",this.h):Sd(a.a,"tid");this.f?H(a,"eid",this.f):Sd(a.a,"eid");g=uj(this.c);g.length&&H(a,"fw",g.join(","));return a.toString()};function uj(a){try{return firebase.app(a).auth().Aa()}catch(b){return []}}
+tj.prototype.toString=function(){var a=Md(this.o,"/__/auth/handler");H(a,"apiKey",this.m);H(a,"appName",this.c);H(a,"authType",this.u);if(this.a.isOAuthProvider){var b=this.a;try{var c=firebase$1.app(this.c).auth().ha();}catch(h){c=null;}b.bb=c;H(a,"providerId",this.a.providerId);b=this.a;c=Le(b.zb);for(var d in c)c[d]=c[d].toString();d=b.Fc;c=Ua(c);for(var e=0;e<d.length;e++){var f=d[e];f in c&&delete c[f];}b.eb&&b.bb&&!c[b.eb]&&(c[b.eb]=b.bb);Ta(c)||H(a,"customParameters",Ke(c));}"function"===typeof this.a.Hb&&
+(b=this.a.Hb(),b.length&&H(a,"scopes",b.join(",")));this.l?H(a,"redirectUrl",this.l):Sd(a.a,"redirectUrl");this.g?H(a,"eventId",this.g):Sd(a.a,"eventId");this.i?H(a,"v",this.i):Sd(a.a,"v");if(this.b)for(var g in this.b)this.b.hasOwnProperty(g)&&!Kd(a,g)&&H(a,g,this.b[g]);this.h?H(a,"tid",this.h):Sd(a.a,"tid");this.f?H(a,"eid",this.f):Sd(a.a,"eid");g=uj(this.c);g.length&&H(a,"fw",g.join(","));return a.toString()};function uj(a){try{return firebase$1.app(a).auth().Ca()}catch(b){return []}}
 function vj(a,b,c,d,e){this.u=a;this.f=b;this.b=c;this.c=d||null;this.h=e||null;this.m=this.o=this.v=null;this.g=[];this.l=this.a=null;}
 function wj(a){var b=he();return Gi(a).then(function(c){a:{var d=Ld(b),e=d.f;d=d.b;for(var f=0;f<c.length;f++){var g=c[f];var h=d;var m=e;0==g.indexOf("chrome-extension://")?h=Ld(g).b==h&&"chrome-extension"==m:"http"!=m&&"https"!=m?h=!1:se.test(g)?h=h==g:(g=g.split(".").join("\\."),h=(new RegExp("^(.+\\."+g+"|"+g+")$","i")).test(h));if(h){c=!0;break a}}c=!1;}if(!c)throw new ch(he());})}
 function xj(a){if(a.l)return a.l;a.l=ue().then(function(){if(!a.o){var b=a.c,c=a.h,d=uj(a.b),e=new sj(a.u,a.f,a.b);e.f=b;e.b=c;e.c=Ra(d||[]);a.o=e.toString();}a.i=new jj(a.o);yj(a);});return a.l}k=vj.prototype;k.Fb=function(a,b,c){var d=new M("popup-closed-by-user"),e=new M("web-storage-unsupported"),f=this,g=!1;return this.ia().then(function(){zj(f).then(function(h){h||(a&&oe(a),b(e),g=!0);});}).s(function(){}).then(function(){if(!g)return re(a)}).then(function(){if(!g)return nd(c).then(function(){b(d);})})};
 k.Ob=function(){var a=I();return !Je(a)&&!Ne(a)};k.Jb=function(){return !1};
 k.Db=function(a,b,c,d,e,f,g,h){if(!a)return E(new M("popup-blocked"));if(g&&!Je())return this.ia().s(function(p){oe(a);e(p);}),d(),D();this.a||(this.a=wj(Aj(this)));var m=this;return this.a.then(function(){var p=m.ia().s(function(u){oe(a);e(u);throw u;});d();return p}).then(function(){Xg(c);if(!g){var p=Bj(m.u,m.f,m.b,b,c,null,f,m.c,void 0,m.h,h);ie(p,a);}}).s(function(p){"auth/network-request-failed"==p.code&&(m.a=null);throw p;})};
-function Aj(a){a.m||(a.v=a.c?Ee(a.c,uj(a.b)):null,a.m=new ni(a.f,Uf(a.h),a.v));return a.m}k.Eb=function(a,b,c,d){this.a||(this.a=wj(Aj(this)));var e=this;return this.a.then(function(){Xg(b);var f=Bj(e.u,e.f,e.b,a,b,he(),c,e.c,void 0,e.h,d);ie(f);}).s(function(f){"auth/network-request-failed"==f.code&&(e.a=null);throw f;})};k.ia=function(){var a=this;return xj(this).then(function(){return a.i.fb}).s(function(){a.a=null;throw new M("network-request-failed");})};k.Rb=function(){return !0};
+function Aj(a){a.m||(a.v=a.c?Ee(a.c,uj(a.b)):null,a.m=new ni(a.f,Uf(a.h),a.v));return a.m}k.Eb=function(a,b,c,d){this.a||(this.a=wj(Aj(this)));var e=this;return this.a.then(function(){Xg(b);var f=Bj(e.u,e.f,e.b,a,b,he(),c,e.c,void 0,e.h,d);ie(f);}).s(function(f){"auth/network-request-failed"==f.code&&(e.a=null);throw f;})};k.ia=function(){var a=this;return xj(this).then(function(){return a.i.gb}).s(function(){a.a=null;throw new M("network-request-failed");})};k.Rb=function(){return !0};
 function Bj(a,b,c,d,e,f,g,h,m,p,u){a=new tj(a,b,c,d,e);a.l=f;a.g=g;a.i=h;a.b=Ua(m||null);a.f=p;return a.nb(u).toString()}function yj(a){if(!a.i)throw Error("IfcHandler must be initialized!");oj(a.i,function(b){var c={};if(b&&b.authEvent){var d=!1;b=Zg(b.authEvent);for(c=0;c<a.g.length;c++)d=a.g[c](b)||d;c={};c.status=d?"ACK":"ERROR";return D(c)}c.status="ERROR";return D(c)});}
-function zj(a){var b={type:"webStorageSupport"};return xj(a).then(function(){return nj(a.i,b)}).then(function(c){if(c&&c.length&&"undefined"!==typeof c[0].webStorageSupport)return c[0].webStorageSupport;throw Error();})}k.ya=function(a){this.g.push(a);};k.La=function(a){Pa(this.g,function(b){return b==a});};function Cj(a){this.a=a||firebase.INTERNAL.reactNative&&firebase.INTERNAL.reactNative.AsyncStorage;if(!this.a)throw new M("internal-error","The React Native compatibility library was not found.");this.type="asyncStorage";}k=Cj.prototype;k.get=function(a){return D(this.a.getItem(a)).then(function(b){return b&&Me(b)})};k.set=function(a,b){return D(this.a.setItem(a,Ke(b)))};k.S=function(a){return D(this.a.removeItem(a))};k.$=function(){};k.ea=function(){};function Dj(a){this.b=a;this.a={};this.f=t(this.c,this);}var Ej=[];function Fj(){var a=ze()?self:null;x(Ej,function(c){c.b==a&&(b=c);});if(!b){var b=new Dj(a);Ej.push(b);}return b}
+function zj(a){var b={type:"webStorageSupport"};return xj(a).then(function(){return nj(a.i,b)}).then(function(c){if(c&&c.length&&"undefined"!==typeof c[0].webStorageSupport)return c[0].webStorageSupport;throw Error();})}k.Aa=function(a){this.g.push(a);};k.Na=function(a){Pa(this.g,function(b){return b==a});};function Cj(a){this.a=a||firebase$1.INTERNAL.reactNative&&firebase$1.INTERNAL.reactNative.AsyncStorage;if(!this.a)throw new M("internal-error","The React Native compatibility library was not found.");this.type="asyncStorage";}k=Cj.prototype;k.get=function(a){return D(this.a.getItem(a)).then(function(b){return b&&Me(b)})};k.set=function(a,b){return D(this.a.setItem(a,Ke(b)))};k.S=function(a){return D(this.a.removeItem(a))};k.$=function(){};k.ea=function(){};function Dj(a){this.b=a;this.a={};this.f=t(this.c,this);}var Ej=[];function Fj(){var a=ze()?self:null;x(Ej,function(c){c.b==a&&(b=c);});if(!b){var b=new Dj(a);Ej.push(b);}return b}
 Dj.prototype.c=function(a){var b=a.data.eventType,c=a.data.eventId,d=this.a[b];if(d&&0<d.length){a.ports[0].postMessage({status:"ack",eventId:c,eventType:b,response:null});var e=[];x(d,function(f){e.push(D().then(function(){return f(a.origin,a.data.data)}));});bc(e).then(function(f){var g=[];x(f,function(h){g.push({fulfilled:h.Gb,value:h.value,reason:h.reason?h.reason.message:void 0});});x(g,function(h){for(var m in h)"undefined"===typeof h[m]&&delete h[m];});a.ports[0].postMessage({status:"done",eventId:c,
 eventType:b,response:g});});}};function Gj(a,b,c){Ta(a.a)&&a.b.addEventListener("message",a.f);"undefined"===typeof a.a[b]&&(a.a[b]=[]);a.a[b].push(c);}function Hj(a){this.a=a;}Hj.prototype.postMessage=function(a,b){this.a.postMessage(a,b);};function Ij(a){this.c=a;this.b=!1;this.a=[];}
 function Jj(a,b,c,d){var e,f=c||{},g,h,m,p=null;if(a.b)return E(Error("connection_unavailable"));var u=d?800:50,A="undefined"!==typeof MessageChannel?new MessageChannel:null;return (new B(function(C,N){A?(e=Math.floor(Math.random()*Math.pow(10,20)).toString(),A.port1.start(),h=setTimeout(function(){N(Error("unsupported_event"));},u),g=function(wa){wa.data.eventId===e&&("ack"===wa.data.status?(clearTimeout(h),m=setTimeout(function(){N(Error("timeout"));},3E3)):"done"===wa.data.status?(clearTimeout(m),
@@ -1461,47 +1788,47 @@ k.set=function(a,b){var c=!1,d,e=this;return Rj(this).then(function(f){d=f;f=Sj(
 k.get=function(a){return Rj(this).then(function(b){return Uj(Sj(Tj(b,!1)).get(a))}).then(function(b){return b&&b.value})};k.S=function(a){var b=!1,c=this;return Rj(this).then(function(d){b=!0;c.b++;return Uj(Sj(Tj(d,!0))["delete"](a))}).then(function(){delete c.c[a];return Vj(c,a)}).ka(function(){b&&c.b--;})};
 function Nj(a){return Rj(a).then(function(b){var c=Sj(Tj(b,!1));return c.getAll?Uj(c.getAll()):new B(function(d,e){var f=[],g=c.openCursor();g.onsuccess=function(h){(h=h.target.result)?(f.push(h.value),h["continue"]()):d(f);};g.onerror=function(h){e(h.target.error);};})}).then(function(b){var c={},d=[];if(0==a.b){for(d=0;d<b.length;d++)c[b[d].fbase_key]=b[d].value;d=je(a.c,c);a.c=c;}return d})}k.$=function(a){0==this.a.length&&Wj(this);this.a.push(a);};
 k.ea=function(a){Pa(this.a,function(b){return b==a});0==this.a.length&&Xj(this);};function Wj(a){function b(){a.f=setTimeout(function(){a.i=Nj(a).then(function(c){0<c.length&&x(a.a,function(d){d(c);});}).then(function(){b();}).s(function(c){"STOP_EVENT"!=c.message&&b();});},800);}Xj(a);b();}function Xj(a){a.i&&a.i.cancel("STOP_EVENT");a.f&&(clearTimeout(a.f),a.f=null);}function Yj(a){var b=this,c=null;this.a=[];this.type="indexedDB";this.c=a;this.b=D().then(function(){if(Mj()){var d=Ge(),e="__sak"+d;Oj||(Oj=new Lj);c=Oj;return c.set(e,d).then(function(){return c.get(e)}).then(function(f){if(f!==d)throw Error("indexedDB not supported!");return c.S(e)}).then(function(){return c}).s(function(){return b.c})}return b.c}).then(function(d){b.type=d.type;d.$(function(e){x(b.a,function(f){f(e);});});return d});}k=Yj.prototype;k.get=function(a){return this.b.then(function(b){return b.get(a)})};
-k.set=function(a,b){return this.b.then(function(c){return c.set(a,b)})};k.S=function(a){return this.b.then(function(b){return b.S(a)})};k.$=function(a){this.a.push(a);};k.ea=function(a){Pa(this.a,function(b){return b==a});};function Zj(){this.a={};this.type="inMemory";}k=Zj.prototype;k.get=function(a){return D(this.a[a])};k.set=function(a,b){this.a[a]=b;return D()};k.S=function(a){delete this.a[a];return D()};k.$=function(){};k.ea=function(){};function ak(){if(!bk()){if("Node"==Ae())throw new M("internal-error","The LocalStorage compatibility library was not found.");throw new M("web-storage-unsupported");}this.a=ck()||firebase.INTERNAL.node.localStorage;this.type="localStorage";}function ck(){try{var a=l.localStorage,b=Ge();a&&(a.setItem(b,"1"),a.removeItem(b));return a}catch(c){return null}}
-function bk(){var a="Node"==Ae();a=ck()||a&&firebase.INTERNAL.node&&firebase.INTERNAL.node.localStorage;if(!a)return !1;try{return a.setItem("__sak","1"),a.removeItem("__sak"),!0}catch(b){return !1}}k=ak.prototype;k.get=function(a){var b=this;return D().then(function(){var c=b.a.getItem(a);return Me(c)})};k.set=function(a,b){var c=this;return D().then(function(){var d=Ke(b);null===d?c.S(a):c.a.setItem(a,d);})};k.S=function(a){var b=this;return D().then(function(){b.a.removeItem(a);})};
-k.$=function(a){l.window&&Wc(l.window,"storage",a);};k.ea=function(a){l.window&&fd(l.window,"storage",a);};function dk(){this.type="nullStorage";}k=dk.prototype;k.get=function(){return D(null)};k.set=function(){return D()};k.S=function(){return D()};k.$=function(){};k.ea=function(){};function ek(){if(!fk()){if("Node"==Ae())throw new M("internal-error","The SessionStorage compatibility library was not found.");throw new M("web-storage-unsupported");}this.a=gk()||firebase.INTERNAL.node.sessionStorage;this.type="sessionStorage";}function gk(){try{var a=l.sessionStorage,b=Ge();a&&(a.setItem(b,"1"),a.removeItem(b));return a}catch(c){return null}}
-function fk(){var a="Node"==Ae();a=gk()||a&&firebase.INTERNAL.node&&firebase.INTERNAL.node.sessionStorage;if(!a)return !1;try{return a.setItem("__sak","1"),a.removeItem("__sak"),!0}catch(b){return !1}}k=ek.prototype;k.get=function(a){var b=this;return D().then(function(){var c=b.a.getItem(a);return Me(c)})};k.set=function(a,b){var c=this;return D().then(function(){var d=Ke(b);null===d?c.S(a):c.a.setItem(a,d);})};k.S=function(a){var b=this;return D().then(function(){b.a.removeItem(a);})};k.$=function(){};
-k.ea=function(){};function hk(){var a={};a.Browser=ik;a.Node=jk;a.ReactNative=kk;a.Worker=lk;this.a=a[Ae()];}var mk,ik={C:ak,Sa:ek},jk={C:ak,Sa:ek},kk={C:Cj,Sa:dk},lk={C:ak,Sa:dk};var nk={$c:"local",NONE:"none",bd:"session"};function ok(a){var b=new M("invalid-persistence-type"),c=new M("unsupported-persistence-type");a:{for(d in nk)if(nk[d]==a){var d=!0;break a}d=!1;}if(!d||"string"!==typeof a)throw b;switch(Ae()){case "ReactNative":if("session"===a)throw c;break;case "Node":if("none"!==a)throw c;break;default:if(!Fe()&&"none"!==a)throw c;}}
-function pk(){var a=!Ne(I())&&ye()?!0:!1,b=Je(),c=Fe();this.m=a;this.h=b;this.l=c;this.a={};mk||(mk=new hk);a=mk;try{this.g=!ge()&&Te()||!l.indexedDB?new a.a.C:new Yj(ze()?new Zj:new a.a.C);}catch(d){this.g=new Zj,this.h=!0;}try{this.i=new a.a.Sa;}catch(d){this.i=new Zj;}this.u=new Zj;this.f=t(this.Pb,this);this.b={};}var qk;function rk(){qk||(qk=new pk);return qk}function sk(a,b){switch(b){case "session":return a.i;case "none":return a.u;default:return a.g}}
+k.set=function(a,b){return this.b.then(function(c){return c.set(a,b)})};k.S=function(a){return this.b.then(function(b){return b.S(a)})};k.$=function(a){this.a.push(a);};k.ea=function(a){Pa(this.a,function(b){return b==a});};function Zj(){this.a={};this.type="inMemory";}k=Zj.prototype;k.get=function(a){return D(this.a[a])};k.set=function(a,b){this.a[a]=b;return D()};k.S=function(a){delete this.a[a];return D()};k.$=function(){};k.ea=function(){};function ak(){if(!bk()){if("Node"==Ae())throw new M("internal-error","The LocalStorage compatibility library was not found.");throw new M("web-storage-unsupported");}this.a=ck()||firebase$1.INTERNAL.node.localStorage;this.type="localStorage";}function ck(){try{var a=l.localStorage,b=Ge();a&&(a.setItem(b,"1"),a.removeItem(b));return a}catch(c){return null}}
+function bk(){var a="Node"==Ae();a=ck()||a&&firebase$1.INTERNAL.node&&firebase$1.INTERNAL.node.localStorage;if(!a)return !1;try{return a.setItem("__sak","1"),a.removeItem("__sak"),!0}catch(b){return !1}}k=ak.prototype;k.get=function(a){var b=this;return D().then(function(){var c=b.a.getItem(a);return Me(c)})};k.set=function(a,b){var c=this;return D().then(function(){var d=Ke(b);null===d?c.S(a):c.a.setItem(a,d);})};k.S=function(a){var b=this;return D().then(function(){b.a.removeItem(a);})};
+k.$=function(a){l.window&&Wc(l.window,"storage",a);};k.ea=function(a){l.window&&fd(l.window,"storage",a);};function dk(){this.type="nullStorage";}k=dk.prototype;k.get=function(){return D(null)};k.set=function(){return D()};k.S=function(){return D()};k.$=function(){};k.ea=function(){};function ek(){if(!fk()){if("Node"==Ae())throw new M("internal-error","The SessionStorage compatibility library was not found.");throw new M("web-storage-unsupported");}this.a=gk()||firebase$1.INTERNAL.node.sessionStorage;this.type="sessionStorage";}function gk(){try{var a=l.sessionStorage,b=Ge();a&&(a.setItem(b,"1"),a.removeItem(b));return a}catch(c){return null}}
+function fk(){var a="Node"==Ae();a=gk()||a&&firebase$1.INTERNAL.node&&firebase$1.INTERNAL.node.sessionStorage;if(!a)return !1;try{return a.setItem("__sak","1"),a.removeItem("__sak"),!0}catch(b){return !1}}k=ek.prototype;k.get=function(a){var b=this;return D().then(function(){var c=b.a.getItem(a);return Me(c)})};k.set=function(a,b){var c=this;return D().then(function(){var d=Ke(b);null===d?c.S(a):c.a.setItem(a,d);})};k.S=function(a){var b=this;return D().then(function(){b.a.removeItem(a);})};k.$=function(){};
+k.ea=function(){};function hk(){var a={};a.Browser=ik;a.Node=jk;a.ReactNative=kk;a.Worker=lk;this.a=a[Ae()];}var mk,ik={C:ak,Ta:ek},jk={C:ak,Ta:ek},kk={C:Cj,Ta:dk},lk={C:ak,Ta:dk};var nk={ad:"local",NONE:"none",cd:"session"};function ok(a){var b=new M("invalid-persistence-type"),c=new M("unsupported-persistence-type");a:{for(d in nk)if(nk[d]==a){var d=!0;break a}d=!1;}if(!d||"string"!==typeof a)throw b;switch(Ae()){case "ReactNative":if("session"===a)throw c;break;case "Node":if("none"!==a)throw c;break;default:if(!Fe()&&"none"!==a)throw c;}}
+function pk(){var a=!Ne(I())&&ye()?!0:!1,b=Je(),c=Fe();this.m=a;this.h=b;this.l=c;this.a={};mk||(mk=new hk);a=mk;try{this.g=!ge()&&Te()||!l.indexedDB?new a.a.C:new Yj(ze()?new Zj:new a.a.C);}catch(d){this.g=new Zj,this.h=!0;}try{this.i=new a.a.Ta;}catch(d){this.i=new Zj;}this.u=new Zj;this.f=t(this.Pb,this);this.b={};}var qk;function rk(){qk||(qk=new pk);return qk}function sk(a,b){switch(b){case "session":return a.i;case "none":return a.u;default:return a.g}}
 function tk(a,b){return "firebase:"+a.name+(b?":"+b:"")}function uk(a,b,c){var d=tk(b,c),e=sk(a,b.C);return a.get(b,c).then(function(f){var g=null;try{g=Me(l.localStorage.getItem(d));}catch(h){}if(g&&!f)return l.localStorage.removeItem(d),a.set(b,g,c);g&&f&&"localStorage"!=e.type&&l.localStorage.removeItem(d);})}k=pk.prototype;k.get=function(a,b){return sk(this,a.C).get(tk(a,b))};function vk(a,b,c){c=tk(b,c);"local"==b.C&&(a.b[c]=null);return sk(a,b.C).S(c)}
 k.set=function(a,b,c){var d=tk(a,c),e=this,f=sk(this,a.C);return f.set(d,b).then(function(){return f.get(d)}).then(function(g){"local"==a.C&&(e.b[d]=g);})};k.addListener=function(a,b,c){a=tk(a,b);this.l&&(this.b[a]=l.localStorage.getItem(a));Ta(this.a)&&(sk(this,"local").$(this.f),this.h||(ge()||!Te())&&l.indexedDB||!this.l||wk(this));this.a[a]||(this.a[a]=[]);this.a[a].push(c);};
 k.removeListener=function(a,b,c){a=tk(a,b);this.a[a]&&(Pa(this.a[a],function(d){return d==c}),0==this.a[a].length&&delete this.a[a]);Ta(this.a)&&(sk(this,"local").ea(this.f),xk(this));};function wk(a){xk(a);a.c=setInterval(function(){for(var b in a.a){var c=l.localStorage.getItem(b),d=a.b[b];c!=d&&(a.b[b]=c,c=new Kc({type:"storage",key:b,target:window,oldValue:d,newValue:c,a:!0}),a.Pb(c));}},1E3);}function xk(a){a.c&&(clearInterval(a.c),a.c=null);}
-k.Pb=function(a){if(a&&a.f){var b=a.a.key;if(null==b)for(var c in this.a){var d=this.b[c];"undefined"===typeof d&&(d=null);var e=l.localStorage.getItem(c);e!==d&&(this.b[c]=e,this.Za(c));}else if(0==b.indexOf("firebase:")&&this.a[b]){"undefined"!==typeof a.a.a?sk(this,"local").ea(this.f):xk(this);if(this.m)if(c=l.localStorage.getItem(b),d=a.a.newValue,d!==c)null!==d?l.localStorage.setItem(b,d):l.localStorage.removeItem(b);else if(this.b[b]===d&&"undefined"===typeof a.a.a)return;var f=this;c=function(){if("undefined"!==
-typeof a.a.a||f.b[b]!==l.localStorage.getItem(b))f.b[b]=l.localStorage.getItem(b),f.Za(b);};uc&&Fc&&10==Fc&&l.localStorage.getItem(b)!==a.a.newValue&&a.a.newValue!==a.a.oldValue?setTimeout(c,10):c();}}else x(a,t(this.Za,this));};k.Za=function(a){this.a[a]&&x(this.a[a],function(b){b();});};function yk(a){this.a=a;this.b=rk();}var zk={name:"authEvent",C:"local"};function Ak(a){return a.b.get(zk,a.a).then(function(b){return Zg(b)})}function Bk(){this.a=rk();}function Ck(){this.b=-1;}function Dk(a,b){this.b=Ek;this.f=l.Uint8Array?new Uint8Array(this.b):Array(this.b);this.g=this.c=0;this.a=[];this.i=a;this.h=b;this.l=l.Int32Array?new Int32Array(64):Array(64);void 0!==Fk||(l.Int32Array?Fk=new Int32Array(Gk):Fk=Gk);this.reset();}var Fk;v(Dk,Ck);for(var Ek=64,Hk=Ek-1,Ik=[],Jk=0;Jk<Hk;Jk++)Ik[Jk]=0;var Kk=Qa(128,Ik);Dk.prototype.reset=function(){this.g=this.c=0;this.a=l.Int32Array?new Int32Array(this.h):Ra(this.h);};
+k.Pb=function(a){if(a&&a.f){var b=a.a.key;if(null==b)for(var c in this.a){var d=this.b[c];"undefined"===typeof d&&(d=null);var e=l.localStorage.getItem(c);e!==d&&(this.b[c]=e,this.$a(c));}else if(0==b.indexOf("firebase:")&&this.a[b]){"undefined"!==typeof a.a.a?sk(this,"local").ea(this.f):xk(this);if(this.m)if(c=l.localStorage.getItem(b),d=a.a.newValue,d!==c)null!==d?l.localStorage.setItem(b,d):l.localStorage.removeItem(b);else if(this.b[b]===d&&"undefined"===typeof a.a.a)return;var f=this;c=function(){if("undefined"!==
+typeof a.a.a||f.b[b]!==l.localStorage.getItem(b))f.b[b]=l.localStorage.getItem(b),f.$a(b);};uc&&Fc&&10==Fc&&l.localStorage.getItem(b)!==a.a.newValue&&a.a.newValue!==a.a.oldValue?setTimeout(c,10):c();}}else x(a,t(this.$a,this));};k.$a=function(a){this.a[a]&&x(this.a[a],function(b){b();});};function yk(a){this.a=a;this.b=rk();}var zk={name:"authEvent",C:"local"};function Ak(a){return a.b.get(zk,a.a).then(function(b){return Zg(b)})}function Bk(){this.a=rk();}function Ck(){this.b=-1;}function Dk(a,b){this.b=Ek;this.f=l.Uint8Array?new Uint8Array(this.b):Array(this.b);this.g=this.c=0;this.a=[];this.i=a;this.h=b;this.l=l.Int32Array?new Int32Array(64):Array(64);void 0!==Fk||(l.Int32Array?Fk=new Int32Array(Gk):Fk=Gk);this.reset();}var Fk;v(Dk,Ck);for(var Ek=64,Hk=Ek-1,Ik=[],Jk=0;Jk<Hk;Jk++)Ik[Jk]=0;var Kk=Qa(128,Ik);Dk.prototype.reset=function(){this.g=this.c=0;this.a=l.Int32Array?new Int32Array(this.h):Ra(this.h);};
 function Lk(a){for(var b=a.f,c=a.l,d=0,e=0;e<b.length;)c[d++]=b[e]<<24|b[e+1]<<16|b[e+2]<<8|b[e+3],e=4*d;for(b=16;64>b;b++){e=c[b-15]|0;d=c[b-2]|0;var f=(c[b-16]|0)+((e>>>7|e<<25)^(e>>>18|e<<14)^e>>>3)|0,g=(c[b-7]|0)+((d>>>17|d<<15)^(d>>>19|d<<13)^d>>>10)|0;c[b]=f+g|0;}d=a.a[0]|0;e=a.a[1]|0;var h=a.a[2]|0,m=a.a[3]|0,p=a.a[4]|0,u=a.a[5]|0,A=a.a[6]|0;f=a.a[7]|0;for(b=0;64>b;b++){var C=((d>>>2|d<<30)^(d>>>13|d<<19)^(d>>>22|d<<10))+(d&e^d&h^e&h)|0;g=p&u^~p&A;f=f+((p>>>6|p<<26)^(p>>>11|p<<21)^(p>>>25|p<<
 7))|0;g=g+(Fk[b]|0)|0;g=f+(g+(c[b]|0)|0)|0;f=A;A=u;u=p;p=m+g|0;m=h;h=e;e=d;d=g+C|0;}a.a[0]=a.a[0]+d|0;a.a[1]=a.a[1]+e|0;a.a[2]=a.a[2]+h|0;a.a[3]=a.a[3]+m|0;a.a[4]=a.a[4]+p|0;a.a[5]=a.a[5]+u|0;a.a[6]=a.a[6]+A|0;a.a[7]=a.a[7]+f|0;}
 function Mk(a,b,c){void 0===c&&(c=b.length);var d=0,e=a.c;if(n(b))for(;d<c;)a.f[e++]=b.charCodeAt(d++),e==a.b&&(Lk(a),e=0);else if(oa(b))for(;d<c;){var f=b[d++];if(!("number"==typeof f&&0<=f&&255>=f&&f==(f|0)))throw Error("message must be a byte array");a.f[e++]=f;e==a.b&&(Lk(a),e=0);}else throw Error("message must be string or array");a.c=e;a.g+=c;}
 var Gk=[1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,
 4094571909,275423344,430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298];function Nk(){Dk.call(this,8,Ok);}v(Nk,Dk);var Ok=[1779033703,3144134277,1013904242,2773480762,1359893119,2600822924,528734635,1541459225];function Pk(a,b,c,d,e){this.u=a;this.i=b;this.l=c;this.m=d||null;this.o=e||null;this.h=b+":"+c;this.v=new Bk;this.g=new yk(this.h);this.f=null;this.b=[];this.a=this.c=null;}function Qk(a){return new M("invalid-cordova-configuration",a)}k=Pk.prototype;
-k.ia=function(){return this.Ba?this.Ba:this.Ba=ve().then(function(){if("function"!==typeof J("universalLinks.subscribe",l))throw Qk("cordova-universal-links-plugin-fix is not installed");if("undefined"===typeof J("BuildInfo.packageName",l))throw Qk("cordova-plugin-buildinfo is not installed");if("function"!==typeof J("cordova.plugins.browsertab.openUrl",l))throw Qk("cordova-plugin-browsertab is not installed");if("function"!==typeof J("cordova.InAppBrowser.open",l))throw Qk("cordova-plugin-inappbrowser is not installed");
+k.ia=function(){return this.Da?this.Da:this.Da=ve().then(function(){if("function"!==typeof J("universalLinks.subscribe",l))throw Qk("cordova-universal-links-plugin-fix is not installed");if("undefined"===typeof J("BuildInfo.packageName",l))throw Qk("cordova-plugin-buildinfo is not installed");if("function"!==typeof J("cordova.plugins.browsertab.openUrl",l))throw Qk("cordova-plugin-browsertab is not installed");if("function"!==typeof J("cordova.InAppBrowser.open",l))throw Qk("cordova-plugin-inappbrowser is not installed");
 },function(){throw new M("cordova-not-ready");})};function Rk(){for(var a=20,b=[];0<a;)b.push("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(Math.floor(62*Math.random()))),a--;return b.join("")}function Sk(a){var b=new Nk;Mk(b,a);a=[];var c=8*b.g;56>b.c?Mk(b,Kk,56-b.c):Mk(b,Kk,b.b-(b.c-56));for(var d=63;56<=d;d--)b.f[d]=c&255,c/=256;Lk(b);for(d=c=0;d<b.i;d++)for(var e=24;0<=e;e-=8)a[c++]=b.a[d]>>e&255;return Kf(a)}
 k.Fb=function(a,b){b(new M("operation-not-supported-in-this-environment"));return D()};k.Db=function(){return E(new M("operation-not-supported-in-this-environment"))};k.Rb=function(){return !1};k.Ob=function(){return !0};k.Jb=function(){return !0};
-k.Eb=function(a,b,c,d){if(this.c)return E(new M("redirect-operation-pending"));var e=this,f=l.document,g=null,h=null,m=null,p=null;return this.c=D().then(function(){Xg(b);return Tk(e)}).then(function(){return Uk(e,a,b,c,d)}).then(function(){return (new B(function(u,A){h=function(){var C=J("cordova.plugins.browsertab.close",l);u();"function"===typeof C&&C();e.a&&"function"===typeof e.a.close&&(e.a.close(),e.a=null);return !1};e.ya(h);m=function(){g||(g=nd(2E3).then(function(){A(new M("redirect-cancelled-by-user"));}));};
-p=function(){Qe()&&m();};f.addEventListener("resume",m,!1);I().toLowerCase().match(/android/)||f.addEventListener("visibilitychange",p,!1);})).s(function(u){return Vk(e).then(function(){throw u;})})}).ka(function(){m&&f.removeEventListener("resume",m,!1);p&&f.removeEventListener("visibilitychange",p,!1);g&&g.cancel();h&&e.La(h);e.c=null;})};
+k.Eb=function(a,b,c,d){if(this.c)return E(new M("redirect-operation-pending"));var e=this,f=l.document,g=null,h=null,m=null,p=null;return this.c=D().then(function(){Xg(b);return Tk(e)}).then(function(){return Uk(e,a,b,c,d)}).then(function(){return (new B(function(u,A){h=function(){var C=J("cordova.plugins.browsertab.close",l);u();"function"===typeof C&&C();e.a&&"function"===typeof e.a.close&&(e.a.close(),e.a=null);return !1};e.Aa(h);m=function(){g||(g=nd(2E3).then(function(){A(new M("redirect-cancelled-by-user"));}));};
+p=function(){Qe()&&m();};f.addEventListener("resume",m,!1);I().toLowerCase().match(/android/)||f.addEventListener("visibilitychange",p,!1);})).s(function(u){return Vk(e).then(function(){throw u;})})}).ka(function(){m&&f.removeEventListener("resume",m,!1);p&&f.removeEventListener("visibilitychange",p,!1);g&&g.cancel();h&&e.Na(h);e.c=null;})};
 function Uk(a,b,c,d,e){var f=Rk(),g=new Yg(b,d,null,f,new M("no-auth-event"),null,e),h=J("BuildInfo.packageName",l);if("string"!==typeof h)throw new M("invalid-cordova-configuration");var m=J("BuildInfo.displayName",l),p={};if(I().toLowerCase().match(/iphone|ipad|ipod/))p.ibi=h;else if(I().toLowerCase().match(/android/))p.apn=h;else return E(new M("operation-not-supported-in-this-environment"));m&&(p.appDisplayName=m);f=Sk(f);p.sessionId=f;var u=Bj(a.u,a.i,a.l,b,c,null,d,a.m,p,a.o,e);return a.ia().then(function(){var A=
 a.h;return a.v.a.set(zk,g.A(),A)}).then(function(){var A=J("cordova.plugins.browsertab.isAvailable",l);if("function"!==typeof A)throw new M("invalid-cordova-configuration");var C=null;A(function(N){if(N){C=J("cordova.plugins.browsertab.openUrl",l);if("function"!==typeof C)throw new M("invalid-cordova-configuration");C(u);}else{C=J("cordova.InAppBrowser.open",l);if("function"!==typeof C)throw new M("invalid-cordova-configuration");N=I();a.a=C(u,N.match(/(iPad|iPhone|iPod).*OS 7_\d/i)||N.match(/(iPad|iPhone|iPod).*OS 8_\d/i)?
-"_blank":"_system","location=yes");}});})}function Wk(a,b){for(var c=0;c<a.b.length;c++)try{a.b[c](b);}catch(d){}}function Tk(a){a.f||(a.f=a.ia().then(function(){return new B(function(b){function c(d){b(d);a.La(c);return !1}a.ya(c);Xk(a);})}));return a.f}function Vk(a){var b=null;return Ak(a.g).then(function(c){b=c;c=a.g;return vk(c.b,zk,c.a)}).then(function(){return b})}
+"_blank":"_system","location=yes");}});})}function Wk(a,b){for(var c=0;c<a.b.length;c++)try{a.b[c](b);}catch(d){}}function Tk(a){a.f||(a.f=a.ia().then(function(){return new B(function(b){function c(d){b(d);a.Na(c);return !1}a.Aa(c);Xk(a);})}));return a.f}function Vk(a){var b=null;return Ak(a.g).then(function(c){b=c;c=a.g;return vk(c.b,zk,c.a)}).then(function(){return b})}
 function Xk(a){function b(g){d=!0;e&&e.cancel();Vk(a).then(function(h){var m=c;if(h&&g&&g.url){var p=null;m=ig(g.url);-1!=m.indexOf("/__/auth/callback")&&(p=Ld(m),p=Me(Kd(p,"firebaseError")||null),p=(p="object"===typeof p?pf(p):null)?new Yg(h.c,h.b,null,null,p,null,h.R()):new Yg(h.c,h.b,m,h.f,null,null,h.R()));m=p||c;}Wk(a,m);});}var c=new Yg("unknown",null,null,null,new M("no-auth-event")),d=!1,e=nd(500).then(function(){return Vk(a).then(function(){d||Wk(a,c);})}),f=l.handleOpenURL;l.handleOpenURL=function(g){0==
-g.toLowerCase().indexOf(J("BuildInfo.packageName",l).toLowerCase()+"://")&&b({url:g});if("function"===typeof f)try{f(g);}catch(h){console.error(h);}};ah||(ah=new $g);bh(b);}k.ya=function(a){this.b.push(a);Tk(this).s(function(b){"auth/invalid-cordova-configuration"===b.code&&(b=new Yg("unknown",null,null,null,new M("no-auth-event")),a(b));});};k.La=function(a){Pa(this.b,function(b){return b==a});};function Yk(a){this.a=a;this.b=rk();}var Zk={name:"pendingRedirect",C:"session"};function $k(a){return a.b.set(Zk,"pending",a.a)}function al(a){return vk(a.b,Zk,a.a)}function bl(a){return a.b.get(Zk,a.a).then(function(b){return "pending"==b})}function cl(a,b,c){this.i={};this.v=0;this.B=a;this.u=b;this.m=c;this.h=[];this.f=!1;this.l=t(this.o,this);this.b=new dl;this.w=new el;this.g=new Yk(this.u+":"+this.m);this.c={};this.c.unknown=this.b;this.c.signInViaRedirect=this.b;this.c.linkViaRedirect=this.b;this.c.reauthViaRedirect=this.b;this.c.signInViaPopup=this.w;this.c.linkViaPopup=this.w;this.c.reauthViaPopup=this.w;this.a=fl(this.B,this.u,this.m,Vf);}
-function fl(a,b,c,d){var e=firebase.SDK_VERSION||null;return we()?new Pk(a,b,c,e,d):new vj(a,b,c,e,d)}cl.prototype.reset=function(){this.f=!1;this.a.La(this.l);this.a=fl(this.B,this.u,this.m);this.i={};};function gl(a){a.f||(a.f=!0,a.a.ya(a.l));var b=a.a;return a.a.ia().s(function(c){a.a==b&&a.reset();throw c;})}function hl(a){a.a.Ob()&&gl(a).s(function(b){var c=new Yg("unknown",null,null,null,new M("operation-not-supported-in-this-environment"));il(b)&&a.o(c);});a.a.Jb()||jl(a.b);}
+g.toLowerCase().indexOf(J("BuildInfo.packageName",l).toLowerCase()+"://")&&b({url:g});if("function"===typeof f)try{f(g);}catch(h){console.error(h);}};ah||(ah=new $g);bh(b);}k.Aa=function(a){this.b.push(a);Tk(this).s(function(b){"auth/invalid-cordova-configuration"===b.code&&(b=new Yg("unknown",null,null,null,new M("no-auth-event")),a(b));});};k.Na=function(a){Pa(this.b,function(b){return b==a});};function Yk(a){this.a=a;this.b=rk();}var Zk={name:"pendingRedirect",C:"session"};function $k(a){return a.b.set(Zk,"pending",a.a)}function al(a){return vk(a.b,Zk,a.a)}function bl(a){return a.b.get(Zk,a.a).then(function(b){return "pending"==b})}function cl(a,b,c){this.i={};this.v=0;this.B=a;this.u=b;this.m=c;this.h=[];this.f=!1;this.l=t(this.o,this);this.b=new dl;this.w=new el;this.g=new Yk(this.u+":"+this.m);this.c={};this.c.unknown=this.b;this.c.signInViaRedirect=this.b;this.c.linkViaRedirect=this.b;this.c.reauthViaRedirect=this.b;this.c.signInViaPopup=this.w;this.c.linkViaPopup=this.w;this.c.reauthViaPopup=this.w;this.a=fl(this.B,this.u,this.m,Vf);}
+function fl(a,b,c,d){var e=firebase$1.SDK_VERSION||null;return we()?new Pk(a,b,c,e,d):new vj(a,b,c,e,d)}cl.prototype.reset=function(){this.f=!1;this.a.Na(this.l);this.a=fl(this.B,this.u,this.m);this.i={};};function gl(a){a.f||(a.f=!0,a.a.Aa(a.l));var b=a.a;return a.a.ia().s(function(c){a.a==b&&a.reset();throw c;})}function hl(a){a.a.Ob()&&gl(a).s(function(b){var c=new Yg("unknown",null,null,null,new M("operation-not-supported-in-this-environment"));il(b)&&a.o(c);});a.a.Jb()||jl(a.b);}
 function kl(a,b){Na(a.h,b)||a.h.push(b);a.f||bl(a.g).then(function(c){c?al(a.g).then(function(){gl(a).s(function(d){var e=new Yg("unknown",null,null,null,new M("operation-not-supported-in-this-environment"));il(d)&&a.o(e);});}):hl(a);}).s(function(){hl(a);});}function ll(a,b){Pa(a.h,function(c){return c==b});}
 cl.prototype.o=function(a){if(!a)throw new M("invalid-auth-event");6E5<=ua()-this.v&&(this.i={},this.v=0);if(a&&a.getUid()&&this.i.hasOwnProperty(a.getUid()))return !1;for(var b=!1,c=0;c<this.h.length;c++){var d=this.h[c];if(d.xb(a.c,a.b)){if(b=this.c[a.c])b.h(a,d),a&&(a.f||a.b)&&(this.i[a.getUid()]=!0,this.v=ua());b=!0;break}}jl(this.b);return b};var ml=new Pe(2E3,1E4),nl=new Pe(3E4,6E4);cl.prototype.oa=function(){return this.b.oa()};
-function ol(a,b,c,d,e,f,g){return a.a.Db(b,c,d,function(){a.f||(a.f=!0,a.a.ya(a.l));},function(){a.reset();},e,f,g)}function il(a){return a&&"auth/cordova-not-ready"==a.code?!0:!1}
+function ol(a,b,c,d,e,f,g){return a.a.Db(b,c,d,function(){a.f||(a.f=!0,a.a.Aa(a.l));},function(){a.reset();},e,f,g)}function il(a){return a&&"auth/cordova-not-ready"==a.code?!0:!1}
 function pl(a,b,c,d,e){var f;return $k(a.g).then(function(){return a.a.Eb(b,c,d,e).s(function(g){if(il(g))throw new M("operation-not-supported-in-this-environment");f=g;return al(a.g).then(function(){throw f;})}).then(function(){return a.a.Rb()?new B(function(){}):al(a.g).then(function(){return a.oa()}).then(function(){}).s(function(){})})})}function ql(a,b,c,d,e){return a.a.Fb(d,function(f){b.ja(c,null,f,e);},ml.get())}var rl={};
 function sl(a,b,c){var d=b+":"+c;rl[d]||(rl[d]=new cl(a,b,c));return rl[d]}function dl(){this.b=null;this.f=[];this.c=[];this.a=null;this.i=this.g=!1;}dl.prototype.reset=function(){this.b=null;this.a&&(this.a.cancel(),this.a=null);};
-dl.prototype.h=function(a,b){if(a){this.reset();this.g=!0;var c=a.c,d=a.b,e=a.a&&"auth/web-storage-unsupported"==a.a.code,f=a.a&&"auth/operation-not-supported-in-this-environment"==a.a.code;this.i=!(!e&&!f);"unknown"!=c||e||f?a.a?(tl(this,!0,null,a.a),D()):b.za(c,d)?ul(this,a,b):E(new M("invalid-auth-event")):(tl(this,!1,null,null),D());}else E(new M("invalid-auth-event"));};function jl(a){a.g||(a.g=!0,tl(a,!1,null,null));}function vl(a){a.g&&!a.i&&tl(a,!1,null,null);}
-function ul(a,b,c){c=c.za(b.c,b.b);var d=b.g,e=b.f,f=b.i,g=b.R(),h=!!b.c.match(/Redirect$/);c(d,e,g,f).then(function(m){tl(a,h,m,null);}).s(function(m){tl(a,h,null,m);});}function wl(a,b){a.b=function(){return E(b)};if(a.c.length)for(var c=0;c<a.c.length;c++)a.c[c](b);}function xl(a,b){a.b=function(){return D(b)};if(a.f.length)for(var c=0;c<a.f.length;c++)a.f[c](b);}function tl(a,b,c,d){b?d?wl(a,d):xl(a,c):xl(a,{user:null});a.f=[];a.c=[];}
-dl.prototype.oa=function(){var a=this;return new B(function(b,c){a.b?a.b().then(b,c):(a.f.push(b),a.c.push(c),yl(a));})};function yl(a){var b=new M("timeout");a.a&&a.a.cancel();a.a=nd(nl.get()).then(function(){a.b||(a.g=!0,tl(a,!0,null,b));});}function el(){}el.prototype.h=function(a,b){if(a){var c=a.c,d=a.b;a.a?(b.ja(a.c,null,a.a,a.b),D()):b.za(c,d)?zl(a,b):E(new M("invalid-auth-event"));}else E(new M("invalid-auth-event"));};
-function zl(a,b){var c=a.b,d=a.c;b.za(d,c)(a.g,a.f,a.R(),a.i).then(function(e){b.ja(d,e,null,c);}).s(function(e){b.ja(d,null,e,c);});}function Al(){this.vb=!1;Object.defineProperty(this,"appVerificationDisabled",{get:function(){return this.vb},set:function(a){this.vb=a;},enumerable:!1});}function Bl(a,b){this.a=b;K(this,"verificationId",a);}Bl.prototype.confirm=function(a){a=Vg(this.verificationId,a);return this.a(a)};function Cl(a,b,c,d){return (new Tg(a)).Va(b,c).then(function(e){return new Bl(e,d)})}function Dl(a){var b=Sf(a);if(!(b&&b.exp&&b.auth_time&&b.iat))throw new M("internal-error","An internal error occurred. The token obtained by Firebase appears to be malformed. Please retry the operation.");L(this,{token:a,expirationTime:Se(1E3*b.exp),authTime:Se(1E3*b.auth_time),issuedAtTime:Se(1E3*b.iat),signInProvider:b.firebase&&b.firebase.sign_in_provider?b.firebase.sign_in_provider:null,claims:b});}function El(a,b,c){this.h=a;this.i=b;this.g=c;this.c=3E4;this.f=96E4;this.b=null;this.a=this.c;if(this.f<this.c)throw Error("Proactive refresh lower bound greater than upper bound!");}El.prototype.start=function(){this.a=this.c;Fl(this,!0);};function Gl(a,b){if(b)return a.a=a.c,a.g();b=a.a;a.a*=2;a.a>a.f&&(a.a=a.f);return b}function Fl(a,b){a.stop();a.b=nd(Gl(a,b)).then(function(){return Re()}).then(function(){return a.h()}).then(function(){Fl(a,!0);}).s(function(c){a.i(c)&&Fl(a,!1);});}
+dl.prototype.h=function(a,b){if(a){this.reset();this.g=!0;var c=a.c,d=a.b,e=a.a&&"auth/web-storage-unsupported"==a.a.code,f=a.a&&"auth/operation-not-supported-in-this-environment"==a.a.code;this.i=!(!e&&!f);"unknown"!=c||e||f?a.a?(tl(this,!0,null,a.a),D()):b.Ba(c,d)?ul(this,a,b):E(new M("invalid-auth-event")):(tl(this,!1,null,null),D());}else E(new M("invalid-auth-event"));};function jl(a){a.g||(a.g=!0,tl(a,!1,null,null));}function vl(a){a.g&&!a.i&&tl(a,!1,null,null);}
+function ul(a,b,c){c=c.Ba(b.c,b.b);var d=b.g,e=b.f,f=b.i,g=b.R(),h=!!b.c.match(/Redirect$/);c(d,e,g,f).then(function(m){tl(a,h,m,null);}).s(function(m){tl(a,h,null,m);});}function wl(a,b){a.b=function(){return E(b)};if(a.c.length)for(var c=0;c<a.c.length;c++)a.c[c](b);}function xl(a,b){a.b=function(){return D(b)};if(a.f.length)for(var c=0;c<a.f.length;c++)a.f[c](b);}function tl(a,b,c,d){b?d?wl(a,d):xl(a,c):xl(a,{user:null});a.f=[];a.c=[];}
+dl.prototype.oa=function(){var a=this;return new B(function(b,c){a.b?a.b().then(b,c):(a.f.push(b),a.c.push(c),yl(a));})};function yl(a){var b=new M("timeout");a.a&&a.a.cancel();a.a=nd(nl.get()).then(function(){a.b||(a.g=!0,tl(a,!0,null,b));});}function el(){}el.prototype.h=function(a,b){if(a){var c=a.c,d=a.b;a.a?(b.ja(a.c,null,a.a,a.b),D()):b.Ba(c,d)?zl(a,b):E(new M("invalid-auth-event"));}else E(new M("invalid-auth-event"));};
+function zl(a,b){var c=a.b,d=a.c;b.Ba(d,c)(a.g,a.f,a.R(),a.i).then(function(e){b.ja(d,e,null,c);}).s(function(e){b.ja(d,null,e,c);});}function Al(){this.vb=!1;Object.defineProperty(this,"appVerificationDisabled",{get:function(){return this.vb},set:function(a){this.vb=a;},enumerable:!1});}function Bl(a,b){this.a=b;K(this,"verificationId",a);}Bl.prototype.confirm=function(a){a=Vg(this.verificationId,a);return this.a(a)};function Cl(a,b,c,d){return (new Tg(a)).Wa(b,c).then(function(e){return new Bl(e,d)})}function Dl(a){var b=Sf(a);if(!(b&&b.exp&&b.auth_time&&b.iat))throw new M("internal-error","An internal error occurred. The token obtained by Firebase appears to be malformed. Please retry the operation.");L(this,{token:a,expirationTime:Se(1E3*b.exp),authTime:Se(1E3*b.auth_time),issuedAtTime:Se(1E3*b.iat),signInProvider:b.firebase&&b.firebase.sign_in_provider?b.firebase.sign_in_provider:null,claims:b});}function El(a,b,c){this.h=a;this.i=b;this.g=c;this.c=3E4;this.f=96E4;this.b=null;this.a=this.c;if(this.f<this.c)throw Error("Proactive refresh lower bound greater than upper bound!");}El.prototype.start=function(){this.a=this.c;Fl(this,!0);};function Gl(a,b){if(b)return a.a=a.c,a.g();b=a.a;a.a*=2;a.a>a.f&&(a.a=a.f);return b}function Fl(a,b){a.stop();a.b=nd(Gl(a,b)).then(function(){return Re()}).then(function(){return a.h()}).then(function(){Fl(a,!0);}).s(function(c){a.i(c)&&Fl(a,!1);});}
 El.prototype.stop=function(){this.b&&(this.b.cancel(),this.b=null);};function Hl(a){this.f=a;this.b=this.a=null;this.c=0;}Hl.prototype.A=function(){return {apiKey:this.f.c,refreshToken:this.a,accessToken:this.b,expirationTime:this.c}};function Il(a,b){var c=b[lg],d=b.refreshToken;b=Jl(b.expiresIn);a.b=c;a.c=b;a.a=d;}function Kl(a,b){a.b=b.b;a.a=b.a;a.c=b.c;}function Jl(a){return ua()+1E3*parseInt(a,10)}
 function Ll(a,b){return zi(a.f,b).then(function(c){a.b=c.access_token;a.c=Jl(c.expires_in);a.a=c.refresh_token;return {accessToken:a.b,expirationTime:a.c,refreshToken:a.a}}).s(function(c){"auth/user-token-expired"==c.code&&(a.a=null);throw c;})}Hl.prototype.getToken=function(a){a=!!a;return this.b&&!this.a?E(new M("user-token-expired")):a||!this.b||ua()>this.c-3E4?this.a?Ll(this,{grant_type:"refresh_token",refresh_token:this.a}):D(null):D({accessToken:this.b,expirationTime:this.c,refreshToken:this.a})};function Ml(a,b){this.a=a||null;this.b=b||null;L(this,{lastSignInTime:Se(b||null),creationTime:Se(a||null)});}function Nl(a){return new Ml(a.a,a.b)}Ml.prototype.A=function(){return {lastLoginAt:this.b,createdAt:this.a}};function Ol(a,b,c,d,e,f){L(this,{uid:a,displayName:d||null,photoURL:e||null,email:c||null,phoneNumber:f||null,providerId:b});}function Pl(a,b){F.call(this,a);for(var c in b)this[c]=b[c];}v(Pl,F);
-function Q(a,b,c){this.I=[];this.l=a.apiKey;this.m=a.appName;this.o=a.authDomain||null;a=firebase.SDK_VERSION?Ee(firebase.SDK_VERSION):null;this.a=new ni(this.l,Uf(Vf),a);this.b=new Hl(this.a);Ql(this,b[lg]);Il(this.b,b);K(this,"refreshToken",this.b.a);Rl(this,c||{});G.call(this);this.J=!1;this.o&&He()&&(this.i=sl(this.o,this.l,this.m));this.O=[];this.h=null;this.w=Sl(this);this.W=t(this.Ha,this);var d=this;this.ga=null;this.va=function(e){d.sa(e.g);};this.Z=null;this.P=[];this.ua=function(e){Tl(d,
-e.c);};this.Y=null;}v(Q,G);Q.prototype.sa=function(a){this.ga=a;ti(this.a,a);};Q.prototype.ha=function(){return this.ga};function Ul(a,b){a.Z&&fd(a.Z,"languageCodeChanged",a.va);(a.Z=b)&&Wc(b,"languageCodeChanged",a.va);}function Tl(a,b){a.P=b;ui(a.a,firebase.SDK_VERSION?Ee(firebase.SDK_VERSION,a.P):null);}Q.prototype.Aa=function(){return Ra(this.P)};function Vl(a,b){a.Y&&fd(a.Y,"frameworkChanged",a.ua);(a.Y=b)&&Wc(b,"frameworkChanged",a.ua);}Q.prototype.Ha=function(){this.w.b&&(this.w.stop(),this.w.start());};
-function Wl(a){try{return firebase.app(a.m).auth()}catch(b){throw new M("internal-error","No firebase.auth.Auth instance is available for the Firebase App '"+a.m+"'!");}}function Sl(a){return new El(function(){return a.G(!0)},function(b){return b&&"auth/network-request-failed"==b.code?!0:!1},function(){var b=a.b.c-ua()-3E5;return 0<b?b:0})}function Xl(a){a.B||a.w.b||(a.w.start(),fd(a,"tokenChanged",a.W),Wc(a,"tokenChanged",a.W));}function Yl(a){fd(a,"tokenChanged",a.W);a.w.stop();}
+function Q(a,b,c){this.I=[];this.l=a.apiKey;this.m=a.appName;this.o=a.authDomain||null;a=firebase$1.SDK_VERSION?Ee(firebase$1.SDK_VERSION):null;this.a=new ni(this.l,Uf(Vf),a);this.b=new Hl(this.a);Ql(this,b[lg]);Il(this.b,b);K(this,"refreshToken",this.b.a);Rl(this,c||{});G.call(this);this.J=!1;this.o&&He()&&(this.i=sl(this.o,this.l,this.m));this.O=[];this.h=null;this.w=Sl(this);this.W=t(this.Ja,this);var d=this;this.ga=null;this.xa=function(e){d.ua(e.g);};this.Z=null;this.P=[];this.wa=function(e){Tl(d,
+e.c);};this.Y=null;}v(Q,G);Q.prototype.ua=function(a){this.ga=a;ti(this.a,a);};Q.prototype.ha=function(){return this.ga};function Ul(a,b){a.Z&&fd(a.Z,"languageCodeChanged",a.xa);(a.Z=b)&&Wc(b,"languageCodeChanged",a.xa);}function Tl(a,b){a.P=b;ui(a.a,firebase$1.SDK_VERSION?Ee(firebase$1.SDK_VERSION,a.P):null);}Q.prototype.Ca=function(){return Ra(this.P)};function Vl(a,b){a.Y&&fd(a.Y,"frameworkChanged",a.wa);(a.Y=b)&&Wc(b,"frameworkChanged",a.wa);}Q.prototype.Ja=function(){this.w.b&&(this.w.stop(),this.w.start());};
+function Wl(a){try{return firebase$1.app(a.m).auth()}catch(b){throw new M("internal-error","No firebase.auth.Auth instance is available for the Firebase App '"+a.m+"'!");}}function Sl(a){return new El(function(){return a.G(!0)},function(b){return b&&"auth/network-request-failed"==b.code?!0:!1},function(){var b=a.b.c-ua()-3E5;return 0<b?b:0})}function Xl(a){a.B||a.w.b||(a.w.start(),fd(a,"tokenChanged",a.W),Wc(a,"tokenChanged",a.W));}function Yl(a){fd(a,"tokenChanged",a.W);a.w.stop();}
 function Ql(a,b){a.ma=b;K(a,"_lat",b);}function Zl(a,b){Pa(a.O,function(c){return c==b});}function $l(a){for(var b=[],c=0;c<a.O.length;c++)b.push(a.O[c](a));return bc(b).then(function(){return a})}function am(a){a.i&&!a.J&&(a.J=!0,kl(a.i,a));}
 function Rl(a,b){L(a,{uid:b.uid,displayName:b.displayName||null,photoURL:b.photoURL||null,email:b.email||null,emailVerified:b.emailVerified||!1,phoneNumber:b.phoneNumber||null,isAnonymous:b.isAnonymous||!1,tenantId:b.tenantId||null,metadata:new Ml(b.createdAt,b.lastLoginAt),providerData:[]});a.a.b=a.tenantId;}K(Q.prototype,"providerId","firebase");function bm(){}function cm(a){return D().then(function(){if(a.B)throw new M("app-deleted");})}
 function dm(a){return Ja(a.providerData,function(b){return b.providerId})}function em(a,b){b&&(fm(a,b.providerId),a.providerData.push(b));}function fm(a,b){Pa(a.providerData,function(c){return c.providerId==b});}function gm(a,b,c){("uid"!=b||c)&&a.hasOwnProperty(b)&&K(a,b,c);}
@@ -1509,17 +1836,17 @@ function hm(a,b){a!=b&&(L(a,{uid:b.uid,displayName:b.displayName,photoURL:b.phot
 function im(a){return a.G().then(function(b){var c=a.isAnonymous;return jm(a,b).then(function(){c||gm(a,"isAnonymous",!1);return b})})}k.dc=function(a){return this.G(a).then(function(b){return new Dl(b)})};k.G=function(a){var b=this;return R(this,cm(this).then(function(){return b.b.getToken(a)}).then(function(c){if(!c)throw new M("internal-error");c.accessToken!=b.ma&&(Ql(b,c.accessToken),b.dispatchEvent(new Pl("tokenChanged")));gm(b,"refreshToken",c.refreshToken);return c.accessToken}))};
 function km(a,b){b[lg]&&a.ma!=b[lg]&&(Il(a.b,b),a.dispatchEvent(new Pl("tokenChanged")),Ql(a,b[lg]),gm(a,"refreshToken",a.b.a));}function jm(a,b){return P(a.a,gj,{idToken:b}).then(t(a.zc,a))}
 k.zc=function(a){a=a.users;if(!a||!a.length)throw new M("internal-error");a=a[0];Rl(this,{uid:a.localId,displayName:a.displayName,photoURL:a.photoUrl,email:a.email,emailVerified:!!a.emailVerified,phoneNumber:a.phoneNumber,lastLoginAt:a.lastLoginAt,createdAt:a.createdAt,tenantId:a.tenantId});for(var b=lm(a),c=0;c<b.length;c++)em(this,b[c]);gm(this,"isAnonymous",!(this.email&&a.passwordHash)&&!(this.providerData&&this.providerData.length));};
-function lm(a){return (a=a.providerUserInfo)&&a.length?Ja(a,function(b){return new Ol(b.rawId,b.providerId,b.email,b.displayName,b.photoUrl,b.phoneNumber)}):[]}k.Ac=function(a){Xe("firebase.User.prototype.reauthenticateAndRetrieveDataWithCredential is deprecated. Please use firebase.User.prototype.reauthenticateWithCredential instead.");return this.gb(a)};
-k.gb=function(a){var b=this,c=null;return R(this,a.f(this.a,this.uid).then(function(d){km(b,d);c=mm(b,d,"reauthenticate");b.h=null;return b.reload()}).then(function(){return c}),!0)};function nm(a,b){return im(a).then(function(){if(Na(dm(a),b))return $l(a).then(function(){throw new M("provider-already-linked");})})}k.rc=function(a){Xe("firebase.User.prototype.linkAndRetrieveDataWithCredential is deprecated. Please use firebase.User.prototype.linkWithCredential instead.");return this.eb(a)};
-k.eb=function(a){var b=this,c=null;return R(this,nm(this,a.providerId).then(function(){return b.G()}).then(function(d){return a.b(b.a,d)}).then(function(d){c=mm(b,d,"link");return om(b,d)}).then(function(){return c}))};k.sc=function(a,b){var c=this;return R(this,nm(this,"phone").then(function(){return Cl(Wl(c),a,b,t(c.eb,c))}))};k.Bc=function(a,b){var c=this;return R(this,D().then(function(){return Cl(Wl(c),a,b,t(c.gb,c))}),!0)};
+function lm(a){return (a=a.providerUserInfo)&&a.length?Ja(a,function(b){return new Ol(b.rawId,b.providerId,b.email,b.displayName,b.photoUrl,b.phoneNumber)}):[]}k.Ac=function(a){Xe("firebase.User.prototype.reauthenticateAndRetrieveDataWithCredential is deprecated. Please use firebase.User.prototype.reauthenticateWithCredential instead.");return this.hb(a)};
+k.hb=function(a){var b=this,c=null;return R(this,a.f(this.a,this.uid).then(function(d){km(b,d);c=mm(b,d,"reauthenticate");b.h=null;return b.reload()}).then(function(){return c}),!0)};function nm(a,b){return im(a).then(function(){if(Na(dm(a),b))return $l(a).then(function(){throw new M("provider-already-linked");})})}k.rc=function(a){Xe("firebase.User.prototype.linkAndRetrieveDataWithCredential is deprecated. Please use firebase.User.prototype.linkWithCredential instead.");return this.fb(a)};
+k.fb=function(a){var b=this,c=null;return R(this,nm(this,a.providerId).then(function(){return b.G()}).then(function(d){return a.b(b.a,d)}).then(function(d){c=mm(b,d,"link");return om(b,d)}).then(function(){return c}))};k.sc=function(a,b){var c=this;return R(this,nm(this,"phone").then(function(){return Cl(Wl(c),a,b,t(c.fb,c))}))};k.Bc=function(a,b){var c=this;return R(this,D().then(function(){return Cl(Wl(c),a,b,t(c.hb,c))}),!0)};
 function mm(a,b,c){var d=Wg(b);b=$f(b);return $e({user:a,credential:d,additionalUserInfo:b,operationType:c})}function om(a,b){km(a,b);return a.reload().then(function(){return a})}k.rb=function(a){var b=this;return R(this,this.G().then(function(c){return b.a.rb(c,a)}).then(function(c){km(b,c);return b.reload()}))};k.Sc=function(a){var b=this;return R(this,this.G().then(function(c){return a.b(b.a,c)}).then(function(c){km(b,c);return b.reload()}))};
 k.sb=function(a){var b=this;return R(this,this.G().then(function(c){return b.a.sb(c,a)}).then(function(c){km(b,c);return b.reload()}))};
 k.tb=function(a){if(void 0===a.displayName&&void 0===a.photoURL)return cm(this);var b=this;return R(this,this.G().then(function(c){return b.a.tb(c,{displayName:a.displayName,photoUrl:a.photoURL})}).then(function(c){km(b,c);gm(b,"displayName",c.displayName||null);gm(b,"photoURL",c.photoUrl||null);x(b.providerData,function(d){"password"===d.providerId&&(K(d,"displayName",b.displayName),K(d,"photoURL",b.photoURL));});return $l(b)}).then(bm))};
 k.Qc=function(a){var b=this;return R(this,im(this).then(function(c){return Na(dm(b),a)?Si(b.a,c,[a]).then(function(d){var e={};x(d.providerUserInfo||[],function(f){e[f.providerId]=!0;});x(dm(b),function(f){e[f]||fm(b,f);});e[Tg.PROVIDER_ID]||K(b,"phoneNumber",null);return $l(b)}):$l(b).then(function(){throw new M("no-such-provider");})}))};
 k.delete=function(){var a=this;return R(this,this.G().then(function(b){return P(a.a,fj,{idToken:b})}).then(function(){a.dispatchEvent(new Pl("userDeleted"));})).then(function(){for(var b=0;b<a.I.length;b++)a.I[b].cancel("app-deleted");Ul(a,null);Vl(a,null);a.I=[];a.B=!0;Yl(a);K(a,"refreshToken",null);a.i&&ll(a.i,a);})};
 k.xb=function(a,b){return "linkViaPopup"==a&&(this.g||null)==b&&this.f||"reauthViaPopup"==a&&(this.g||null)==b&&this.f||"linkViaRedirect"==a&&(this.ca||null)==b||"reauthViaRedirect"==a&&(this.ca||null)==b?!0:!1};k.ja=function(a,b,c,d){"linkViaPopup"!=a&&"reauthViaPopup"!=a||d!=(this.g||null)||(c&&this.v?this.v(c):b&&!c&&this.f&&this.f(b),this.c&&(this.c.cancel(),this.c=null),delete this.f,delete this.v);};
-k.za=function(a,b){return "linkViaPopup"==a&&b==(this.g||null)?t(this.Bb,this):"reauthViaPopup"==a&&b==(this.g||null)?t(this.Cb,this):"linkViaRedirect"==a&&(this.ca||null)==b?t(this.Bb,this):"reauthViaRedirect"==a&&(this.ca||null)==b?t(this.Cb,this):null};k.tc=function(a){var b=this;return pm(this,"linkViaPopup",a,function(){return nm(b,a.providerId).then(function(){return $l(b)})},!1)};k.Cc=function(a){return pm(this,"reauthViaPopup",a,function(){return D()},!0)};
-function pm(a,b,c,d,e){if(!He())return E(new M("operation-not-supported-in-this-environment"));if(a.h&&!e)return E(a.h);var f=Zf(c.providerId),g=Ge(a.uid+":::"),h=null;(!Je()||ye())&&a.o&&c.isOAuthProvider&&(h=Bj(a.o,a.l,a.m,b,c,null,g,firebase.SDK_VERSION||null,null,null,a.tenantId));var m=pe(h,f&&f.Da,f&&f.Ca);d=d().then(function(){qm(a);if(!e)return a.G().then(function(){})}).then(function(){return ol(a.i,m,b,c,g,!!h,a.tenantId)}).then(function(){return new B(function(p,u){a.ja(b,null,new M("cancelled-popup-request"),
+k.Ba=function(a,b){return "linkViaPopup"==a&&b==(this.g||null)?t(this.Bb,this):"reauthViaPopup"==a&&b==(this.g||null)?t(this.Cb,this):"linkViaRedirect"==a&&(this.ca||null)==b?t(this.Bb,this):"reauthViaRedirect"==a&&(this.ca||null)==b?t(this.Cb,this):null};k.tc=function(a){var b=this;return pm(this,"linkViaPopup",a,function(){return nm(b,a.providerId).then(function(){return $l(b)})},!1)};k.Cc=function(a){return pm(this,"reauthViaPopup",a,function(){return D()},!0)};
+function pm(a,b,c,d,e){if(!He())return E(new M("operation-not-supported-in-this-environment"));if(a.h&&!e)return E(a.h);var f=Zf(c.providerId),g=Ge(a.uid+":::"),h=null;(!Je()||ye())&&a.o&&c.isOAuthProvider&&(h=Bj(a.o,a.l,a.m,b,c,null,g,firebase$1.SDK_VERSION||null,null,null,a.tenantId));var m=pe(h,f&&f.sa,f&&f.ra);d=d().then(function(){qm(a);if(!e)return a.G().then(function(){})}).then(function(){return ol(a.i,m,b,c,g,!!h,a.tenantId)}).then(function(){return new B(function(p,u){a.ja(b,null,new M("cancelled-popup-request"),
 a.g||null);a.f=p;a.v=u;a.g=g;a.c=ql(a.i,a,b,m,g);})}).then(function(p){m&&oe(m);return p?$e(p):null}).s(function(p){m&&oe(m);throw p;});return R(a,d,e)}k.uc=function(a){var b=this;return rm(this,"linkViaRedirect",a,function(){return nm(b,a.providerId)},!1)};k.Dc=function(a){return rm(this,"reauthViaRedirect",a,function(){return D()},!0)};
 function rm(a,b,c,d,e){if(!He())return E(new M("operation-not-supported-in-this-environment"));if(a.h&&!e)return E(a.h);var f=null,g=Ge(a.uid+":::");d=d().then(function(){qm(a);if(!e)return a.G().then(function(){})}).then(function(){a.ca=g;return $l(a)}).then(function(h){a.da&&(h=a.da,h=h.b.set(sm,a.A(),h.a));return h}).then(function(){return pl(a.i,b,c,g,a.tenantId)}).s(function(h){f=h;if(a.da)return tm(a.da);throw f;}).then(function(){if(f)throw f;});return R(a,d,e)}
 function qm(a){if(!a.i||!a.J){if(a.i&&!a.J)throw new M("internal-error");throw new M("auth-domain-config-required");}}k.Bb=function(a,b,c,d){var e=this;this.c&&(this.c.cancel(),this.c=null);var f=null;c=this.G().then(function(g){return pg(e.a,{requestUri:a,postBody:d,sessionId:b,idToken:g})}).then(function(g){f=mm(e,g,"link");return om(e,g)}).then(function(){return f});return R(this,c)};
@@ -1531,61 +1858,61 @@ function vm(a){if(!a.apiKey)return null;var b={apiKey:a.apiKey,authDomain:a.auth
 function wm(a,b,c,d){var e=new Q(a,b);c&&(e.da=c);d&&Tl(e,d);return e.reload().then(function(){return e})}function xm(a,b,c,d){b=b||{apiKey:a.l,authDomain:a.o,appName:a.m};var e=a.b,f={};f[lg]=e.b;f.refreshToken=e.a;f.expiresIn=(e.c-ua())/1E3;b=new Q(b,f);c&&(b.da=c);d&&Tl(b,d);hm(b,a);return b}function ym(a){this.a=a;this.b=rk();}var sm={name:"redirectUser",C:"session"};function tm(a){return vk(a.b,sm,a.a)}function zm(a,b){return a.b.get(sm,a.a).then(function(c){c&&b&&(c.authDomain=b);return vm(c||{})})}function Am(a){this.a=a;this.b=rk();this.c=null;this.f=Bm(this);this.b.addListener(Cm("local"),this.a,t(this.g,this));}Am.prototype.g=function(){var a=this,b=Cm("local");Dm(this,function(){return D().then(function(){return a.c&&"local"!=a.c.C?a.b.get(b,a.a):null}).then(function(c){if(c)return Em(a,"local").then(function(){a.c=b;})})});};function Em(a,b){var c=[],d;for(d in nk)nk[d]!==b&&c.push(vk(a.b,Cm(nk[d]),a.a));c.push(vk(a.b,Fm,a.a));return ac(c)}
 function Bm(a){var b=Cm("local"),c=Cm("session"),d=Cm("none");return uk(a.b,b,a.a).then(function(){return a.b.get(c,a.a)}).then(function(e){return e?c:a.b.get(d,a.a).then(function(f){return f?d:a.b.get(b,a.a).then(function(g){return g?b:a.b.get(Fm,a.a).then(function(h){return h?Cm(h):b})})})}).then(function(e){a.c=e;return Em(a,e.C)}).s(function(){a.c||(a.c=b);})}var Fm={name:"persistence",C:"session"};function Cm(a){return {name:"authUser",C:a}}
 Am.prototype.mb=function(a){var b=null,c=this;ok(a);return Dm(this,function(){return a!=c.c.C?c.b.get(c.c,c.a).then(function(d){b=d;return Em(c,a)}).then(function(){c.c=Cm(a);if(b)return c.b.set(c.c,b,c.a)}):D()})};function Gm(a){return Dm(a,function(){return a.b.set(Fm,a.c.C,a.a)})}function Hm(a,b){return Dm(a,function(){return a.b.set(a.c,b.A(),a.a)})}function Im(a){return Dm(a,function(){return vk(a.b,a.c,a.a)})}
-function Jm(a,b){return Dm(a,function(){return a.b.get(a.c,a.a).then(function(c){c&&b&&(c.authDomain=b);return vm(c||{})})})}function Dm(a,b){a.f=a.f.then(b,b);return a.f}function Km(a){this.l=!1;K(this,"settings",new Al);K(this,"app",a);if(S(this).options&&S(this).options.apiKey)a=firebase.SDK_VERSION?Ee(firebase.SDK_VERSION):null,this.b=new ni(S(this).options&&S(this).options.apiKey,Uf(Vf),a);else throw new M("invalid-api-key");this.O=[];this.m=[];this.J=[];this.Ub=firebase.INTERNAL.createSubscribe(t(this.oc,this));this.W=void 0;this.Vb=firebase.INTERNAL.createSubscribe(t(this.pc,this));Lm(this,null);this.h=new Am(S(this).options.apiKey+":"+S(this).name);this.w=
-new ym(S(this).options.apiKey+":"+S(this).name);this.Y=T(this,Mm(this));this.i=T(this,Nm(this));this.ga=!1;this.ma=t(this.Nc,this);this.ub=t(this.aa,this);this.ua=t(this.bc,this);this.va=t(this.mc,this);this.Ha=t(this.nc,this);this.a=null;Om(this);this.INTERNAL={};this.INTERNAL["delete"]=t(this.delete,this);this.INTERNAL.logFramework=t(this.vc,this);this.o=0;G.call(this);Pm(this);this.I=[];}v(Km,G);function Qm(a){F.call(this,"languageCodeChanged");this.g=a;}v(Qm,F);
-function Rm(a){F.call(this,"frameworkChanged");this.c=a;}v(Rm,F);k=Km.prototype;k.mb=function(a){a=this.h.mb(a);return T(this,a)};k.sa=function(a){this.Z===a||this.l||(this.Z=a,ti(this.b,this.Z),this.dispatchEvent(new Qm(this.ha())));};k.ha=function(){return this.Z};k.Tc=function(){var a=l.navigator;this.sa(a?a.languages&&a.languages[0]||a.language||a.userLanguage||null:null);};k.vc=function(a){this.I.push(a);ui(this.b,firebase.SDK_VERSION?Ee(firebase.SDK_VERSION,this.I):null);this.dispatchEvent(new Rm(this.I));};
-k.Aa=function(){return Ra(this.I)};k.nb=function(a){this.P===a||this.l||(this.P=a,this.b.b=this.P);};k.R=function(){return this.P};function Pm(a){Object.defineProperty(a,"lc",{get:function(){return this.ha()},set:function(b){this.sa(b);},enumerable:!1});a.Z=null;Object.defineProperty(a,"ti",{get:function(){return this.R()},set:function(b){this.nb(b);},enumerable:!1});a.P=null;}
-k.toJSON=function(){return {apiKey:S(this).options.apiKey,authDomain:S(this).options.authDomain,appName:S(this).name,currentUser:U(this)&&U(this).A()}};function Sm(a){return a.Tb||E(new M("auth-domain-config-required"))}function Om(a){var b=S(a).options.authDomain,c=S(a).options.apiKey;b&&He()&&(a.Tb=a.Y.then(function(){if(!a.l){a.a=sl(b,c,S(a).name);kl(a.a,a);U(a)&&am(U(a));if(a.B){am(a.B);var d=a.B;d.sa(a.ha());Ul(d,a);d=a.B;Tl(d,a.I);Vl(d,a);a.B=null;}return a.a}}));}
-k.xb=function(a,b){switch(a){case "unknown":case "signInViaRedirect":return !0;case "signInViaPopup":return this.g==b&&!!this.f;default:return !1}};k.ja=function(a,b,c,d){"signInViaPopup"==a&&this.g==d&&(c&&this.v?this.v(c):b&&!c&&this.f&&this.f(b),this.c&&(this.c.cancel(),this.c=null),delete this.f,delete this.v);};k.za=function(a,b){return "signInViaRedirect"==a||"signInViaPopup"==a&&this.g==b&&this.f?t(this.ac,this):null};
+function Jm(a,b){return Dm(a,function(){return a.b.get(a.c,a.a).then(function(c){c&&b&&(c.authDomain=b);return vm(c||{})})})}function Dm(a,b){a.f=a.f.then(b,b);return a.f}function Km(a){this.l=!1;K(this,"settings",new Al);K(this,"app",a);if(S(this).options&&S(this).options.apiKey)a=firebase$1.SDK_VERSION?Ee(firebase$1.SDK_VERSION):null,this.b=new ni(S(this).options&&S(this).options.apiKey,Uf(Vf),a);else throw new M("invalid-api-key");this.O=[];this.m=[];this.J=[];this.Ub=firebase$1.INTERNAL.createSubscribe(t(this.oc,this));this.W=void 0;this.Vb=firebase$1.INTERNAL.createSubscribe(t(this.pc,this));Lm(this,null);this.h=new Am(S(this).options.apiKey+":"+S(this).name);this.w=
+new ym(S(this).options.apiKey+":"+S(this).name);this.Y=T(this,Mm(this));this.i=T(this,Nm(this));this.ga=!1;this.ma=t(this.Nc,this);this.ub=t(this.aa,this);this.wa=t(this.bc,this);this.xa=t(this.mc,this);this.Ja=t(this.nc,this);this.a=null;Om(this);this.INTERNAL={};this.INTERNAL["delete"]=t(this.delete,this);this.INTERNAL.logFramework=t(this.vc,this);this.o=0;G.call(this);Pm(this);this.I=[];}v(Km,G);function Qm(a){F.call(this,"languageCodeChanged");this.g=a;}v(Qm,F);
+function Rm(a){F.call(this,"frameworkChanged");this.c=a;}v(Rm,F);k=Km.prototype;k.mb=function(a){a=this.h.mb(a);return T(this,a)};k.ua=function(a){this.Z===a||this.l||(this.Z=a,ti(this.b,this.Z),this.dispatchEvent(new Qm(this.ha())));};k.ha=function(){return this.Z};k.Tc=function(){var a=l.navigator;this.ua(a?a.languages&&a.languages[0]||a.language||a.userLanguage||null:null);};k.vc=function(a){this.I.push(a);ui(this.b,firebase$1.SDK_VERSION?Ee(firebase$1.SDK_VERSION,this.I):null);this.dispatchEvent(new Rm(this.I));};
+k.Ca=function(){return Ra(this.I)};k.nb=function(a){this.P===a||this.l||(this.P=a,this.b.b=this.P);};k.R=function(){return this.P};function Pm(a){Object.defineProperty(a,"lc",{get:function(){return this.ha()},set:function(b){this.ua(b);},enumerable:!1});a.Z=null;Object.defineProperty(a,"ti",{get:function(){return this.R()},set:function(b){this.nb(b);},enumerable:!1});a.P=null;}
+k.toJSON=function(){return {apiKey:S(this).options.apiKey,authDomain:S(this).options.authDomain,appName:S(this).name,currentUser:U(this)&&U(this).A()}};function Sm(a){return a.Tb||E(new M("auth-domain-config-required"))}function Om(a){var b=S(a).options.authDomain,c=S(a).options.apiKey;b&&He()&&(a.Tb=a.Y.then(function(){if(!a.l){a.a=sl(b,c,S(a).name);kl(a.a,a);U(a)&&am(U(a));if(a.B){am(a.B);var d=a.B;d.ua(a.ha());Ul(d,a);d=a.B;Tl(d,a.I);Vl(d,a);a.B=null;}return a.a}}));}
+k.xb=function(a,b){switch(a){case "unknown":case "signInViaRedirect":return !0;case "signInViaPopup":return this.g==b&&!!this.f;default:return !1}};k.ja=function(a,b,c,d){"signInViaPopup"==a&&this.g==d&&(c&&this.v?this.v(c):b&&!c&&this.f&&this.f(b),this.c&&(this.c.cancel(),this.c=null),delete this.f,delete this.v);};k.Ba=function(a,b){return "signInViaRedirect"==a||"signInViaPopup"==a&&this.g==b&&this.f?t(this.ac,this):null};
 k.ac=function(a,b,c,d){var e=this;a={requestUri:a,postBody:d,sessionId:b,tenantId:c};this.c&&(this.c.cancel(),this.c=null);var f=null,g=null,h=ng(e.b,a).then(function(m){f=Wg(m);g=$f(m);return m});a=e.Y.then(function(){return h}).then(function(m){return Tm(e,m)}).then(function(){return $e({user:U(e),credential:f,additionalUserInfo:g,operationType:"signIn"})});return T(this,a)};
-k.Lc=function(a){if(!He())return E(new M("operation-not-supported-in-this-environment"));var b=this,c=Zf(a.providerId),d=Ge(),e=null;(!Je()||ye())&&S(this).options.authDomain&&a.isOAuthProvider&&(e=Bj(S(this).options.authDomain,S(this).options.apiKey,S(this).name,"signInViaPopup",a,null,d,firebase.SDK_VERSION||null,null,null,this.R()));var f=pe(e,c&&c.Da,c&&c.Ca);c=Sm(this).then(function(g){return ol(g,f,"signInViaPopup",a,d,!!e,b.R())}).then(function(){return new B(function(g,h){b.ja("signInViaPopup",
+k.Lc=function(a){if(!He())return E(new M("operation-not-supported-in-this-environment"));var b=this,c=Zf(a.providerId),d=Ge(),e=null;(!Je()||ye())&&S(this).options.authDomain&&a.isOAuthProvider&&(e=Bj(S(this).options.authDomain,S(this).options.apiKey,S(this).name,"signInViaPopup",a,null,d,firebase$1.SDK_VERSION||null,null,null,this.R()));var f=pe(e,c&&c.sa,c&&c.ra);c=Sm(this).then(function(g){return ol(g,f,"signInViaPopup",a,d,!!e,b.R())}).then(function(){return new B(function(g,h){b.ja("signInViaPopup",
 null,new M("cancelled-popup-request"),b.g);b.f=g;b.v=h;b.g=d;b.c=ql(b.a,b,"signInViaPopup",f,d);})}).then(function(g){f&&oe(f);return g?$e(g):null}).s(function(g){f&&oe(f);throw g;});return T(this,c)};k.Mc=function(a){if(!He())return E(new M("operation-not-supported-in-this-environment"));var b=this,c=Sm(this).then(function(){return Gm(b.h)}).then(function(){return pl(b.a,"signInViaRedirect",a,void 0,b.R())});return T(this,c)};
 function Um(a){if(!He())return E(new M("operation-not-supported-in-this-environment"));var b=Sm(a).then(function(){return a.a.oa()}).then(function(c){return c?$e(c):null});return T(a,b)}k.oa=function(){var a=this;return Um(this).then(function(b){a.a&&vl(a.a.b);return b}).s(function(b){a.a&&vl(a.a.b);throw b;})};
-k.Rc=function(a){if(!a)return E(new M("null-user"));if(this.P!=a.tenantId)return E(new M("tenant-id-mismatch"));var b=this,c={};c.apiKey=S(this).options.apiKey;c.authDomain=S(this).options.authDomain;c.appName=S(this).name;var d=xm(a,c,b.w,b.Aa());return T(this,this.i.then(function(){if(S(b).options.apiKey!=a.l)return d.reload()}).then(function(){if(U(b)&&a.uid==U(b).uid)return hm(U(b),a),b.aa(a);Lm(b,d);am(d);return b.aa(d)}).then(function(){Vm(b);}))};
-function Tm(a,b){var c={};c.apiKey=S(a).options.apiKey;c.authDomain=S(a).options.authDomain;c.appName=S(a).name;return a.Y.then(function(){return wm(c,b,a.w,a.Aa())}).then(function(d){if(U(a)&&d.uid==U(a).uid)return hm(U(a),d),a.aa(d);Lm(a,d);am(d);return a.aa(d)}).then(function(){Vm(a);})}
-function Lm(a,b){U(a)&&(Zl(U(a),a.ub),fd(U(a),"tokenChanged",a.ua),fd(U(a),"userDeleted",a.va),fd(U(a),"userInvalidated",a.Ha),Yl(U(a)));b&&(b.O.push(a.ub),Wc(b,"tokenChanged",a.ua),Wc(b,"userDeleted",a.va),Wc(b,"userInvalidated",a.Ha),0<a.o&&Xl(b));K(a,"currentUser",b);b&&(b.sa(a.ha()),Ul(b,a),Tl(b,a.I),Vl(b,a));}k.pb=function(){var a=this,b=this.i.then(function(){a.a&&vl(a.a.b);if(!U(a))return D();Lm(a,null);return Im(a.h).then(function(){Vm(a);})});return T(this,b)};
+k.Rc=function(a){if(!a)return E(new M("null-user"));if(this.P!=a.tenantId)return E(new M("tenant-id-mismatch"));var b=this,c={};c.apiKey=S(this).options.apiKey;c.authDomain=S(this).options.authDomain;c.appName=S(this).name;var d=xm(a,c,b.w,b.Ca());return T(this,this.i.then(function(){if(S(b).options.apiKey!=a.l)return d.reload()}).then(function(){if(U(b)&&a.uid==U(b).uid)return hm(U(b),a),b.aa(a);Lm(b,d);am(d);return b.aa(d)}).then(function(){Vm(b);}))};
+function Tm(a,b){var c={};c.apiKey=S(a).options.apiKey;c.authDomain=S(a).options.authDomain;c.appName=S(a).name;return a.Y.then(function(){return wm(c,b,a.w,a.Ca())}).then(function(d){if(U(a)&&d.uid==U(a).uid)return hm(U(a),d),a.aa(d);Lm(a,d);am(d);return a.aa(d)}).then(function(){Vm(a);})}
+function Lm(a,b){U(a)&&(Zl(U(a),a.ub),fd(U(a),"tokenChanged",a.wa),fd(U(a),"userDeleted",a.xa),fd(U(a),"userInvalidated",a.Ja),Yl(U(a)));b&&(b.O.push(a.ub),Wc(b,"tokenChanged",a.wa),Wc(b,"userDeleted",a.xa),Wc(b,"userInvalidated",a.Ja),0<a.o&&Xl(b));K(a,"currentUser",b);b&&(b.ua(a.ha()),Ul(b,a),Tl(b,a.I),Vl(b,a));}k.pb=function(){var a=this,b=this.i.then(function(){a.a&&vl(a.a.b);if(!U(a))return D();Lm(a,null);return Im(a.h).then(function(){Vm(a);})});return T(this,b)};
 function Wm(a){var b=zm(a.w,S(a).options.authDomain).then(function(c){if(a.B=c)c.da=a.w;return tm(a.w)});return T(a,b)}function Mm(a){var b=S(a).options.authDomain,c=Wm(a).then(function(){return Jm(a.h,b)}).then(function(d){return d?(d.da=a.w,a.B&&(a.B.ca||null)==(d.ca||null)?d:d.reload().then(function(){return Hm(a.h,d).then(function(){return d})}).s(function(e){return "auth/network-request-failed"==e.code?d:Im(a.h)})):null}).then(function(d){Lm(a,d||null);});return T(a,c)}
 function Nm(a){return a.Y.then(function(){return Um(a)}).s(function(){}).then(function(){if(!a.l)return a.ma()}).s(function(){}).then(function(){if(!a.l){a.ga=!0;var b=a.h;b.b.addListener(Cm("local"),b.a,a.ma);}})}
 k.Nc=function(){var a=this;return Jm(this.h,S(this).options.authDomain).then(function(b){if(!a.l){var c;if(c=U(a)&&b){c=U(a).uid;var d=b.uid;c=void 0===c||null===c||""===c||void 0===d||null===d||""===d?!1:c==d;}if(c)return hm(U(a),b),U(a).G();if(U(a)||b)Lm(a,b),b&&(am(b),b.da=a.w),a.a&&kl(a.a,a),Vm(a);}})};k.aa=function(a){return Hm(this.h,a)};k.bc=function(){Vm(this);this.aa(U(this));};k.mc=function(){this.pb();};k.nc=function(){this.pb();};
 function Xm(a,b){var c=null,d=null;return T(a,b.then(function(e){c=Wg(e);d=$f(e);return Tm(a,e)}).then(function(){return $e({user:U(a),credential:c,additionalUserInfo:d,operationType:"signIn"})}))}k.oc=function(a){var b=this;this.addAuthTokenListener(function(){a.next(U(b));});};k.pc=function(a){var b=this;Ym(this,function(){a.next(U(b));});};k.xc=function(a,b,c){var d=this;this.ga&&Promise.resolve().then(function(){q(a)?a(U(d)):q(a.next)&&a.next(U(d));});return this.Ub(a,b,c)};
 k.wc=function(a,b,c){var d=this;this.ga&&Promise.resolve().then(function(){d.W=d.getUid();q(a)?a(U(d)):q(a.next)&&a.next(U(d));});return this.Vb(a,b,c)};k.cc=function(a){var b=this,c=this.i.then(function(){return U(b)?U(b).G(a).then(function(d){return {accessToken:d}}):null});return T(this,c)};k.Hc=function(a){var b=this;return this.i.then(function(){return Xm(b,P(b.b,ij,{token:a}))}).then(function(c){var d=c.user;gm(d,"isAnonymous",!1);b.aa(d);return c})};
-k.Ic=function(a,b){var c=this;return this.i.then(function(){return Xm(c,P(c.b,Ig,{email:a,password:b}))})};k.Xb=function(a,b){var c=this;return this.i.then(function(){return Xm(c,P(c.b,ej,{email:a,password:b}))})};k.Ra=function(a){var b=this;return this.i.then(function(){return Xm(b,a.na(b.b))})};k.Gc=function(a){Xe("firebase.auth.Auth.prototype.signInAndRetrieveDataWithCredential is deprecated. Please use firebase.auth.Auth.prototype.signInWithCredential instead.");return this.Ra(a)};
+k.Ic=function(a,b){var c=this;return this.i.then(function(){return Xm(c,P(c.b,Ig,{email:a,password:b}))})};k.Xb=function(a,b){var c=this;return this.i.then(function(){return Xm(c,P(c.b,ej,{email:a,password:b}))})};k.Sa=function(a){var b=this;return this.i.then(function(){return Xm(b,a.na(b.b))})};k.Gc=function(a){Xe("firebase.auth.Auth.prototype.signInAndRetrieveDataWithCredential is deprecated. Please use firebase.auth.Auth.prototype.signInWithCredential instead.");return this.Sa(a)};
 k.ob=function(){var a=this;return this.i.then(function(){var b=U(a);if(b&&b.isAnonymous){var c=$e({providerId:null,isNewUser:!1});return $e({user:b,credential:null,additionalUserInfo:c,operationType:"signIn"})}return Xm(a,a.b.ob()).then(function(d){var e=d.user;gm(e,"isAnonymous",!0);a.aa(e);return d})})};function S(a){return a.app}function U(a){return a.currentUser}k.getUid=function(){return U(this)&&U(this).uid||null};function Zm(a){return U(a)&&U(a)._lat||null}
 function Vm(a){if(a.ga){for(var b=0;b<a.m.length;b++)if(a.m[b])a.m[b](Zm(a));if(a.W!==a.getUid()&&a.J.length)for(a.W=a.getUid(),b=0;b<a.J.length;b++)if(a.J[b])a.J[b](Zm(a));}}k.Wb=function(a){this.addAuthTokenListener(a);this.o++;0<this.o&&U(this)&&Xl(U(this));};k.Ec=function(a){var b=this;x(this.m,function(c){c==a&&b.o--;});0>this.o&&(this.o=0);0==this.o&&U(this)&&Yl(U(this));this.removeAuthTokenListener(a);};
 k.addAuthTokenListener=function(a){var b=this;this.m.push(a);T(this,this.i.then(function(){b.l||Na(b.m,a)&&a(Zm(b));}));};k.removeAuthTokenListener=function(a){Pa(this.m,function(b){return b==a});};function Ym(a,b){a.J.push(b);T(a,a.i.then(function(){!a.l&&Na(a.J,b)&&a.W!==a.getUid()&&(a.W=a.getUid(),b(Zm(a)));}));}
 k.delete=function(){this.l=!0;for(var a=0;a<this.O.length;a++)this.O[a].cancel("app-deleted");this.O=[];this.h&&(a=this.h,a.b.removeListener(Cm("local"),a.a,this.ma));this.a&&(ll(this.a,this),vl(this.a.b));return Promise.resolve()};function T(a,b){a.O.push(b);b.ka(function(){Oa(a.O,b);});return b}k.$b=function(a){return T(this,Ei(this.b,a))};k.qc=function(a){return !!Ng(a)};
-k.lb=function(a,b){var c=this;return T(this,D().then(function(){var d=new zf(b);if(!d.c)throw new M("argument-error",Hf+" must be true when sending sign in link to email");return Jf(d)}).then(function(d){return c.b.lb(a,d)}).then(function(){}))};k.Uc=function(a){return this.Ka(a).then(function(b){return b.data.email})};k.$a=function(a,b){return T(this,this.b.$a(a,b).then(function(){}))};k.Ka=function(a){return T(this,this.b.Ka(a).then(function(b){return new df(b)}))};
-k.Xa=function(a){return T(this,this.b.Xa(a).then(function(){}))};k.kb=function(a,b){var c=this;return T(this,D().then(function(){return "undefined"===typeof b||Ta(b)?{}:Jf(new zf(b))}).then(function(d){return c.b.kb(a,d)}).then(function(){}))};k.Kc=function(a,b){return T(this,Cl(this,a,b,t(this.Ra,this)))};
-k.Jc=function(a,b){var c=this;return T(this,D().then(function(){var d=b||he(),e=Mg(a,d);d=Ng(d);if(!d)throw new M("argument-error","Invalid email link!");if(d.tenantId!==c.R())throw new M("tenant-id-mismatch");return c.Ra(e)}))};function $m(){}$m.prototype.render=function(){};$m.prototype.reset=function(){};$m.prototype.getResponse=function(){};$m.prototype.execute=function(){};function an(){this.a={};this.b=1E12;}var bn=null;an.prototype.render=function(a,b){this.a[this.b.toString()]=new cn(a,b);return this.b++};an.prototype.reset=function(a){var b=dn(this,a);a=en(a);b&&a&&(b.delete(),delete this.a[a]);};an.prototype.getResponse=function(a){return (a=dn(this,a))?a.getResponse():null};an.prototype.execute=function(a){(a=dn(this,a))&&a.execute();};function dn(a,b){return (b=en(b))?a.a[b]||null:null}function en(a){return (a="undefined"===typeof a?1E12:a)?a.toString():null}
+k.lb=function(a,b){var c=this;return T(this,D().then(function(){var d=new zf(b);if(!d.c)throw new M("argument-error",Hf+" must be true when sending sign in link to email");return Jf(d)}).then(function(d){return c.b.lb(a,d)}).then(function(){}))};k.Uc=function(a){return this.Ma(a).then(function(b){return b.data.email})};k.ab=function(a,b){return T(this,this.b.ab(a,b).then(function(){}))};k.Ma=function(a){return T(this,this.b.Ma(a).then(function(b){return new df(b)}))};
+k.Ya=function(a){return T(this,this.b.Ya(a).then(function(){}))};k.kb=function(a,b){var c=this;return T(this,D().then(function(){return "undefined"===typeof b||Ta(b)?{}:Jf(new zf(b))}).then(function(d){return c.b.kb(a,d)}).then(function(){}))};k.Kc=function(a,b){return T(this,Cl(this,a,b,t(this.Sa,this)))};
+k.Jc=function(a,b){var c=this;return T(this,D().then(function(){var d=b||he(),e=Mg(a,d);d=Ng(d);if(!d)throw new M("argument-error","Invalid email link!");if(d.tenantId!==c.R())throw new M("tenant-id-mismatch");return c.Sa(e)}))};function $m(){}$m.prototype.render=function(){};$m.prototype.reset=function(){};$m.prototype.getResponse=function(){};$m.prototype.execute=function(){};function an(){this.a={};this.b=1E12;}var bn=null;an.prototype.render=function(a,b){this.a[this.b.toString()]=new cn(a,b);return this.b++};an.prototype.reset=function(a){var b=dn(this,a);a=en(a);b&&a&&(b.delete(),delete this.a[a]);};an.prototype.getResponse=function(a){return (a=dn(this,a))?a.getResponse():null};an.prototype.execute=function(a){(a=dn(this,a))&&a.execute();};function dn(a,b){return (b=en(b))?a.a[b]||null:null}function en(a){return (a="undefined"===typeof a?1E12:a)?a.toString():null}
 function cn(a,b){this.g=!1;this.c=b;this.a=this.b=null;this.h="invisible"!==this.c.size;this.f=Vd(a);var c=this;this.i=function(){c.execute();};this.h?this.execute():Wc(this.f,"click",this.i);}cn.prototype.getResponse=function(){fn(this);return this.b};
 cn.prototype.execute=function(){fn(this);var a=this;this.a||(this.a=setTimeout(function(){a.b=Ce();var b=a.c.callback,c=a.c["expired-callback"];if(b)try{b(a.b);}catch(d){}a.a=setTimeout(function(){a.a=null;a.b=null;if(c)try{c();}catch(d){}a.h&&a.execute();},6E4);},500));};cn.prototype.delete=function(){fn(this);this.g=!0;clearTimeout(this.a);this.a=null;fd(this.f,"click",this.i);};function fn(a){if(a.g)throw Error("reCAPTCHA mock was already deleted!");}function gn(){}gn.prototype.g=function(){bn||(bn=new an);return D(bn)};gn.prototype.c=function(){};var hn=null;function jn(){this.b=l.grecaptcha?Infinity:0;this.f=null;this.a="__rcb"+Math.floor(1E6*Math.random()).toString();}var kn=new Xa(Ya,"https://www.google.com/recaptcha/api.js?onload=%{onload}&render=explicit&hl=%{hl}"),ln=new Pe(3E4,6E4);
 jn.prototype.g=function(a){var b=this;return new B(function(c,d){var e=setTimeout(function(){d(new M("network-request-failed"));},ln.get());if(!l.grecaptcha||a!==b.f&&!b.b){l[b.a]=function(){if(l.grecaptcha){b.f=a;var g=l.grecaptcha.render;l.grecaptcha.render=function(h,m){h=g(h,m);b.b++;return h};clearTimeout(e);c(l.grecaptcha);}else clearTimeout(e),d(new M("internal-error"));delete l[b.a];};var f=eb(kn,{onload:b.a,hl:a||""});D(gi(f)).s(function(){clearTimeout(e);d(new M("internal-error","Unable to load external reCAPTCHA dependencies!"));});}else clearTimeout(e),
 c(l.grecaptcha);})};jn.prototype.c=function(){this.b--;};var mn=null;function nn(a,b,c,d,e,f,g){K(this,"type","recaptcha");this.c=this.f=null;this.B=!1;this.u=b;this.g=null;g?(hn||(hn=new gn),g=hn):(mn||(mn=new jn),g=mn);this.m=g;this.a=c||{theme:"light",type:"image"};this.h=[];if(this.a[on])throw new M("argument-error","sitekey should not be provided for reCAPTCHA as one is automatically provisioned for the current project.");this.i="invisible"===this.a[pn];if(!l.document)throw new M("operation-not-supported-in-this-environment","RecaptchaVerifier is only supported in a browser HTTP/HTTPS environment with DOM support.");
 if(!Vd(b)||!this.i&&Vd(b).hasChildNodes())throw new M("argument-error","reCAPTCHA container is either not found or already contains inner elements!");this.o=new ni(a,f||null,e||null);this.v=d||function(){return null};var h=this;this.l=[];var m=this.a[qn];this.a[qn]=function(u){rn(h,u);if("function"===typeof m)m(u);else if("string"===typeof m){var A=J(m,l);"function"===typeof A&&A(u);}};var p=this.a[sn];this.a[sn]=function(){rn(h,null);if("function"===typeof p)p();else if("string"===typeof p){var u=
 J(p,l);"function"===typeof u&&u();}};}var qn="callback",sn="expired-callback",on="sitekey",pn="size";function rn(a,b){for(var c=0;c<a.l.length;c++)try{a.l[c](b);}catch(d){}}function tn(a,b){Pa(a.l,function(c){return c==b});}function un(a,b){a.h.push(b);b.ka(function(){Oa(a.h,b);});return b}k=nn.prototype;
-k.Ba=function(){var a=this;return this.f?this.f:this.f=un(this,D().then(function(){if(Ie()&&!ze())return ue();throw new M("operation-not-supported-in-this-environment","RecaptchaVerifier is only supported in a browser HTTP/HTTPS environment.");}).then(function(){return a.m.g(a.v())}).then(function(b){a.g=b;return P(a.o,hj,{})}).then(function(b){a.a[on]=b.recaptchaSiteKey;}).s(function(b){a.f=null;throw b;}))};
-k.render=function(){vn(this);var a=this;return un(this,this.Ba().then(function(){if(null===a.c){var b=a.u;if(!a.i){var c=Vd(b);b=Yd("DIV");c.appendChild(b);}a.c=a.g.render(b,a.a);}return a.c}))};k.verify=function(){vn(this);var a=this;return un(this,this.render().then(function(b){return new B(function(c){var d=a.g.getResponse(b);if(d)c(d);else{var e=function(f){f&&(tn(a,e),c(f));};a.l.push(e);a.i&&a.g.execute(a.c);}})}))};k.reset=function(){vn(this);null!==this.c&&this.g.reset(this.c);};
+k.Da=function(){var a=this;return this.f?this.f:this.f=un(this,D().then(function(){if(Ie()&&!ze())return ue();throw new M("operation-not-supported-in-this-environment","RecaptchaVerifier is only supported in a browser HTTP/HTTPS environment.");}).then(function(){return a.m.g(a.v())}).then(function(b){a.g=b;return P(a.o,hj,{})}).then(function(b){a.a[on]=b.recaptchaSiteKey;}).s(function(b){a.f=null;throw b;}))};
+k.render=function(){vn(this);var a=this;return un(this,this.Da().then(function(){if(null===a.c){var b=a.u;if(!a.i){var c=Vd(b);b=Yd("DIV");c.appendChild(b);}a.c=a.g.render(b,a.a);}return a.c}))};k.verify=function(){vn(this);var a=this;return un(this,this.render().then(function(b){return new B(function(c){var d=a.g.getResponse(b);if(d)c(d);else{var e=function(f){f&&(tn(a,e),c(f));};a.l.push(e);a.i&&a.g.execute(a.c);}})}))};k.reset=function(){vn(this);null!==this.c&&this.g.reset(this.c);};
 function vn(a){if(a.B)throw new M("internal-error","RecaptchaVerifier instance has been destroyed.");}k.clear=function(){vn(this);this.B=!0;this.m.c();for(var a=0;a<this.h.length;a++)this.h[a].cancel("RecaptchaVerifier instance has been destroyed.");if(!this.i){a=Vd(this.u);for(var b;b=a.firstChild;)a.removeChild(b);}};
-function wn(a,b,c){var d=!1;try{this.b=c||firebase.app();}catch(g){throw new M("argument-error","No firebase.app.App instance is currently initialized.");}if(this.b.options&&this.b.options.apiKey)c=this.b.options.apiKey;else throw new M("invalid-api-key");var e=this,f=null;try{f=this.b.auth().Aa();}catch(g){}try{d=this.b.auth().settings.appVerificationDisabledForTesting;}catch(g){}f=firebase.SDK_VERSION?Ee(firebase.SDK_VERSION,f):null;nn.call(this,c,a,b,function(){try{var g=e.b.auth().ha();}catch(h){g=
+function wn(a,b,c){var d=!1;try{this.b=c||firebase$1.app();}catch(g){throw new M("argument-error","No firebase.app.App instance is currently initialized.");}if(this.b.options&&this.b.options.apiKey)c=this.b.options.apiKey;else throw new M("invalid-api-key");var e=this,f=null;try{f=this.b.auth().Ca();}catch(g){}try{d=this.b.auth().settings.appVerificationDisabledForTesting;}catch(g){}f=firebase$1.SDK_VERSION?Ee(firebase$1.SDK_VERSION,f):null;nn.call(this,c,a,b,function(){try{var g=e.b.auth().ha();}catch(h){g=
 null;}return g},f,Uf(Vf),d);}v(wn,nn);function xn(a,b,c,d){a:{c=Array.prototype.slice.call(c);var e=0;for(var f=!1,g=0;g<b.length;g++)if(b[g].optional)f=!0;else{if(f)throw new M("internal-error","Argument validator encountered a required argument after an optional argument.");e++;}f=b.length;if(c.length<e||f<c.length)d="Expected "+(e==f?1==e?"1 argument":e+" arguments":e+"-"+f+" arguments")+" but got "+c.length+".";else{for(e=0;e<c.length;e++)if(f=b[e].optional&&void 0===c[e],!b[e].N(c[e])&&!f){b=b[e];if(0>e||e>=yn.length)throw new M("internal-error",
 "Argument validator received an unsupported number of arguments.");c=yn[e];d=(d?"":c+" argument ")+(b.name?'"'+b.name+'" ':"")+"must be "+b.M+".";break a}d=null;}}if(d)throw new M("argument-error",a+" failed: "+d);}var yn="First Second Third Fourth Fifth Sixth Seventh Eighth Ninth".split(" ");function V(a,b){return {name:a||"",M:"a valid string",optional:!!b,N:n}}function zn(a,b){return {name:a||"",M:"a boolean",optional:!!b,N:ha}}
 function W(a,b){return {name:a||"",M:"a valid object",optional:!!b,N:r}}function An(a,b){return {name:a||"",M:"a function",optional:!!b,N:q}}function Bn(a,b){return {name:a||"",M:"null",optional:!!b,N:ma}}function Cn(){return {name:"",M:"an HTML element",optional:!1,N:function(a){return !!(a&&a instanceof Element)}}}function Dn(){return {name:"auth",M:"an instance of Firebase Auth",optional:!0,N:function(a){return !!(a&&a instanceof Km)}}}
-function En(){return {name:"app",M:"an instance of Firebase App",optional:!0,N:function(a){return !!(a&&a instanceof firebase.app.App)}}}function Fn(a){return {name:a?a+"Credential":"credential",M:a?"a valid "+a+" credential":"a valid credential",optional:!1,N:function(b){if(!b)return !1;var c=!a||b.providerId===a;return !(!b.na||!c)}}}
-function Gn(){return {name:"authProvider",M:"a valid Auth provider",optional:!1,N:function(a){return !!(a&&a.providerId&&a.hasOwnProperty&&a.hasOwnProperty("isOAuthProvider"))}}}function Hn(){return {name:"applicationVerifier",M:"an implementation of firebase.auth.ApplicationVerifier",optional:!1,N:function(a){return !!(a&&n(a.type)&&q(a.verify))}}}function X(a,b,c,d){return {name:c||"",M:a.M+" or "+b.M,optional:!!d,N:function(e){return a.N(e)||b.N(e)}}}function Y(a,b){for(var c in b){var d=b[c].name;a[d]=In(d,a[c],b[c].j);}}function Jn(a,b){for(var c in b){var d=b[c].name;d!==c&&Object.defineProperty(a,d,{get:ta(function(e){return this[e]},c),set:ta(function(e,f,g,h){xn(e,[g],[h],!0);this[f]=h;},d,c,b[c].Ya),enumerable:!0});}}function Z(a,b,c,d){a[b]=In(b,c,d);}
-function In(a,b,c){function d(){var g=Array.prototype.slice.call(arguments);xn(e,c,g);return b.apply(this,g)}if(!c)return b;var e=Kn(a),f;for(f in b)d[f]=b[f];for(f in b.prototype)d.prototype[f]=b.prototype[f];return d}function Kn(a){a=a.split(".");return a[a.length-1]}Y(Km.prototype,{Xa:{name:"applyActionCode",j:[V("code")]},Ka:{name:"checkActionCode",j:[V("code")]},$a:{name:"confirmPasswordReset",j:[V("code"),V("newPassword")]},Xb:{name:"createUserWithEmailAndPassword",j:[V("email"),V("password")]},$b:{name:"fetchSignInMethodsForEmail",j:[V("email")]},oa:{name:"getRedirectResult",j:[]},qc:{name:"isSignInWithEmailLink",j:[V("emailLink")]},wc:{name:"onAuthStateChanged",j:[X(W(),An(),"nextOrObserver"),An("opt_error",!0),An("opt_completed",!0)]},xc:{name:"onIdTokenChanged",
-j:[X(W(),An(),"nextOrObserver"),An("opt_error",!0),An("opt_completed",!0)]},kb:{name:"sendPasswordResetEmail",j:[V("email"),X(W("opt_actionCodeSettings",!0),Bn(null,!0),"opt_actionCodeSettings",!0)]},lb:{name:"sendSignInLinkToEmail",j:[V("email"),W("actionCodeSettings")]},mb:{name:"setPersistence",j:[V("persistence")]},Gc:{name:"signInAndRetrieveDataWithCredential",j:[Fn()]},ob:{name:"signInAnonymously",j:[]},Ra:{name:"signInWithCredential",j:[Fn()]},Hc:{name:"signInWithCustomToken",j:[V("token")]},
+function En(){return {name:"app",M:"an instance of Firebase App",optional:!0,N:function(a){return !!(a&&a instanceof firebase$1.app.App)}}}function Fn(a){return {name:a?a+"Credential":"credential",M:a?"a valid "+a+" credential":"a valid credential",optional:!1,N:function(b){if(!b)return !1;var c=!a||b.providerId===a;return !(!b.na||!c)}}}
+function Gn(){return {name:"authProvider",M:"a valid Auth provider",optional:!1,N:function(a){return !!(a&&a.providerId&&a.hasOwnProperty&&a.hasOwnProperty("isOAuthProvider"))}}}function Hn(){return {name:"applicationVerifier",M:"an implementation of firebase.auth.ApplicationVerifier",optional:!1,N:function(a){return !!(a&&n(a.type)&&q(a.verify))}}}function X(a,b,c,d){return {name:c||"",M:a.M+" or "+b.M,optional:!!d,N:function(e){return a.N(e)||b.N(e)}}}function Y(a,b){for(var c in b){var d=b[c].name;a[d]=In(d,a[c],b[c].j);}}function Jn(a,b){for(var c in b){var d=b[c].name;d!==c&&Object.defineProperty(a,d,{get:ta(function(e){return this[e]},c),set:ta(function(e,f,g,h){xn(e,[g],[h],!0);this[f]=h;},d,c,b[c].Za),enumerable:!0});}}function Z(a,b,c,d){a[b]=In(b,c,d);}
+function In(a,b,c){function d(){var g=Array.prototype.slice.call(arguments);xn(e,c,g);return b.apply(this,g)}if(!c)return b;var e=Kn(a),f;for(f in b)d[f]=b[f];for(f in b.prototype)d.prototype[f]=b.prototype[f];return d}function Kn(a){a=a.split(".");return a[a.length-1]}Y(Km.prototype,{Ya:{name:"applyActionCode",j:[V("code")]},Ma:{name:"checkActionCode",j:[V("code")]},ab:{name:"confirmPasswordReset",j:[V("code"),V("newPassword")]},Xb:{name:"createUserWithEmailAndPassword",j:[V("email"),V("password")]},$b:{name:"fetchSignInMethodsForEmail",j:[V("email")]},oa:{name:"getRedirectResult",j:[]},qc:{name:"isSignInWithEmailLink",j:[V("emailLink")]},wc:{name:"onAuthStateChanged",j:[X(W(),An(),"nextOrObserver"),An("opt_error",!0),An("opt_completed",!0)]},xc:{name:"onIdTokenChanged",
+j:[X(W(),An(),"nextOrObserver"),An("opt_error",!0),An("opt_completed",!0)]},kb:{name:"sendPasswordResetEmail",j:[V("email"),X(W("opt_actionCodeSettings",!0),Bn(null,!0),"opt_actionCodeSettings",!0)]},lb:{name:"sendSignInLinkToEmail",j:[V("email"),W("actionCodeSettings")]},mb:{name:"setPersistence",j:[V("persistence")]},Gc:{name:"signInAndRetrieveDataWithCredential",j:[Fn()]},ob:{name:"signInAnonymously",j:[]},Sa:{name:"signInWithCredential",j:[Fn()]},Hc:{name:"signInWithCustomToken",j:[V("token")]},
 Ic:{name:"signInWithEmailAndPassword",j:[V("email"),V("password")]},Jc:{name:"signInWithEmailLink",j:[V("email"),V("emailLink",!0)]},Kc:{name:"signInWithPhoneNumber",j:[V("phoneNumber"),Hn()]},Lc:{name:"signInWithPopup",j:[Gn()]},Mc:{name:"signInWithRedirect",j:[Gn()]},Rc:{name:"updateCurrentUser",j:[X(function(a){return {name:"user",M:"an instance of Firebase User",optional:!!a,N:function(b){return !!(b&&b instanceof Q)}}}(),Bn(),"user")]},pb:{name:"signOut",j:[]},toJSON:{name:"toJSON",j:[V(null,!0)]},
-Tc:{name:"useDeviceLanguage",j:[]},Uc:{name:"verifyPasswordResetCode",j:[V("code")]}});Jn(Km.prototype,{lc:{name:"languageCode",Ya:X(V(),Bn(),"languageCode")},ti:{name:"tenantId",Ya:X(V(),Bn(),"tenantId")}});Km.Persistence=nk;Km.Persistence.LOCAL="local";Km.Persistence.SESSION="session";Km.Persistence.NONE="none";
-Y(Q.prototype,{"delete":{name:"delete",j:[]},dc:{name:"getIdTokenResult",j:[zn("opt_forceRefresh",!0)]},G:{name:"getIdToken",j:[zn("opt_forceRefresh",!0)]},rc:{name:"linkAndRetrieveDataWithCredential",j:[Fn()]},eb:{name:"linkWithCredential",j:[Fn()]},sc:{name:"linkWithPhoneNumber",j:[V("phoneNumber"),Hn()]},tc:{name:"linkWithPopup",j:[Gn()]},uc:{name:"linkWithRedirect",j:[Gn()]},Ac:{name:"reauthenticateAndRetrieveDataWithCredential",j:[Fn()]},gb:{name:"reauthenticateWithCredential",j:[Fn()]},Bc:{name:"reauthenticateWithPhoneNumber",
+Tc:{name:"useDeviceLanguage",j:[]},Uc:{name:"verifyPasswordResetCode",j:[V("code")]}});Jn(Km.prototype,{lc:{name:"languageCode",Za:X(V(),Bn(),"languageCode")},ti:{name:"tenantId",Za:X(V(),Bn(),"tenantId")}});Km.Persistence=nk;Km.Persistence.LOCAL="local";Km.Persistence.SESSION="session";Km.Persistence.NONE="none";
+Y(Q.prototype,{"delete":{name:"delete",j:[]},dc:{name:"getIdTokenResult",j:[zn("opt_forceRefresh",!0)]},G:{name:"getIdToken",j:[zn("opt_forceRefresh",!0)]},rc:{name:"linkAndRetrieveDataWithCredential",j:[Fn()]},fb:{name:"linkWithCredential",j:[Fn()]},sc:{name:"linkWithPhoneNumber",j:[V("phoneNumber"),Hn()]},tc:{name:"linkWithPopup",j:[Gn()]},uc:{name:"linkWithRedirect",j:[Gn()]},Ac:{name:"reauthenticateAndRetrieveDataWithCredential",j:[Fn()]},hb:{name:"reauthenticateWithCredential",j:[Fn()]},Bc:{name:"reauthenticateWithPhoneNumber",
 j:[V("phoneNumber"),Hn()]},Cc:{name:"reauthenticateWithPopup",j:[Gn()]},Dc:{name:"reauthenticateWithRedirect",j:[Gn()]},reload:{name:"reload",j:[]},jb:{name:"sendEmailVerification",j:[X(W("opt_actionCodeSettings",!0),Bn(null,!0),"opt_actionCodeSettings",!0)]},toJSON:{name:"toJSON",j:[V(null,!0)]},Qc:{name:"unlink",j:[V("provider")]},rb:{name:"updateEmail",j:[V("email")]},sb:{name:"updatePassword",j:[V("password")]},Sc:{name:"updatePhoneNumber",j:[Fn("phone")]},tb:{name:"updateProfile",j:[W("profile")]}});
-Y(an.prototype,{execute:{name:"execute"},render:{name:"render"},reset:{name:"reset"},getResponse:{name:"getResponse"}});Y($m.prototype,{execute:{name:"execute"},render:{name:"render"},reset:{name:"reset"},getResponse:{name:"getResponse"}});Y(B.prototype,{ka:{name:"finally"},s:{name:"catch"},then:{name:"then"}});Jn(Al.prototype,{appVerificationDisabled:{name:"appVerificationDisabledForTesting",Ya:zn("appVerificationDisabledForTesting")}});Y(Bl.prototype,{confirm:{name:"confirm",j:[V("verificationCode")]}});
-Z(jg,"fromJSON",function(a){a=n(a)?JSON.parse(a):a;for(var b,c=[ug,Lg,Sg,rg],d=0;d<c.length;d++)if(b=c[d](a))return b;return null},[X(V(),W(),"json")]);Z(Gg,"credential",function(a,b){return new Fg(a,b)},[V("email"),V("password")]);Y(Fg.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Y(xg.prototype,{wa:{name:"addScope",j:[V("scope")]},Ea:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(xg,"credential",yg,[X(V(),W(),"token")]);Z(Gg,"credentialWithLink",Mg,[V("email"),V("emailLink")]);
-Y(zg.prototype,{wa:{name:"addScope",j:[V("scope")]},Ea:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(zg,"credential",Ag,[X(V(),W(),"token")]);Y(Bg.prototype,{wa:{name:"addScope",j:[V("scope")]},Ea:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(Bg,"credential",Cg,[X(V(),X(W(),Bn()),"idToken"),X(V(),Bn(),"accessToken",!0)]);Y(Dg.prototype,{Ea:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(Dg,"credential",Eg,[X(V(),W(),"token"),V("secret",!0)]);
-Y(O.prototype,{wa:{name:"addScope",j:[V("scope")]},credential:{name:"credential",j:[X(V(),X(W(),Bn()),"optionsOrIdToken"),X(V(),Bn(),"accessToken",!0)]},Ea:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Y(sg.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Y(mg.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Z(Tg,"credential",Vg,[V("verificationId"),V("verificationCode")]);Y(Tg.prototype,{Va:{name:"verifyPhoneNumber",j:[V("phoneNumber"),Hn()]}});
+Y(an.prototype,{execute:{name:"execute"},render:{name:"render"},reset:{name:"reset"},getResponse:{name:"getResponse"}});Y($m.prototype,{execute:{name:"execute"},render:{name:"render"},reset:{name:"reset"},getResponse:{name:"getResponse"}});Y(B.prototype,{ka:{name:"finally"},s:{name:"catch"},then:{name:"then"}});Jn(Al.prototype,{appVerificationDisabled:{name:"appVerificationDisabledForTesting",Za:zn("appVerificationDisabledForTesting")}});Y(Bl.prototype,{confirm:{name:"confirm",j:[V("verificationCode")]}});
+Z(jg,"fromJSON",function(a){a=n(a)?JSON.parse(a):a;for(var b,c=[ug,Lg,Sg,rg],d=0;d<c.length;d++)if(b=c[d](a))return b;return null},[X(V(),W(),"json")]);Z(Gg,"credential",function(a,b){return new Fg(a,b)},[V("email"),V("password")]);Y(Fg.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Y(xg.prototype,{ya:{name:"addScope",j:[V("scope")]},Ga:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(xg,"credential",yg,[X(V(),W(),"token")]);Z(Gg,"credentialWithLink",Mg,[V("email"),V("emailLink")]);
+Y(zg.prototype,{ya:{name:"addScope",j:[V("scope")]},Ga:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(zg,"credential",Ag,[X(V(),W(),"token")]);Y(Bg.prototype,{ya:{name:"addScope",j:[V("scope")]},Ga:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(Bg,"credential",Cg,[X(V(),X(W(),Bn()),"idToken"),X(V(),Bn(),"accessToken",!0)]);Y(Dg.prototype,{Ga:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Z(Dg,"credential",Eg,[X(V(),W(),"token"),V("secret",!0)]);
+Y(O.prototype,{ya:{name:"addScope",j:[V("scope")]},credential:{name:"credential",j:[X(V(),X(W(),Bn()),"optionsOrIdToken"),X(V(),Bn(),"accessToken",!0)]},Ga:{name:"setCustomParameters",j:[W("customOAuthParameters")]}});Y(sg.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Y(mg.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Z(Tg,"credential",Vg,[V("verificationId"),V("verificationCode")]);Y(Tg.prototype,{Wa:{name:"verifyPhoneNumber",j:[V("phoneNumber"),Hn()]}});
 Y(Og.prototype,{A:{name:"toJSON",j:[V(null,!0)]}});Y(M.prototype,{toJSON:{name:"toJSON",j:[V(null,!0)]}});Y(dh.prototype,{toJSON:{name:"toJSON",j:[V(null,!0)]}});Y(ch.prototype,{toJSON:{name:"toJSON",j:[V(null,!0)]}});Y(wn.prototype,{clear:{name:"clear",j:[]},render:{name:"render",j:[]},verify:{name:"verify",j:[]}});Z(qf,"parseLink",yf,[V("link")]);
-(function(){if("undefined"!==typeof firebase&&firebase.INTERNAL&&firebase.INTERNAL.registerService){var a={ActionCodeInfo:{Operation:{EMAIL_SIGNIN:hf,PASSWORD_RESET:"PASSWORD_RESET",RECOVER_EMAIL:"RECOVER_EMAIL",VERIFY_EMAIL:"VERIFY_EMAIL"}},Auth:Km,AuthCredential:jg,Error:M};Z(a,"EmailAuthProvider",Gg,[]);Z(a,"FacebookAuthProvider",xg,[]);Z(a,"GithubAuthProvider",zg,[]);Z(a,"GoogleAuthProvider",Bg,[]);Z(a,"TwitterAuthProvider",Dg,[]);Z(a,"OAuthProvider",O,[V("providerId")]);Z(a,"SAMLAuthProvider",
-wg,[V("providerId")]);Z(a,"PhoneAuthProvider",Tg,[Dn()]);Z(a,"RecaptchaVerifier",wn,[X(V(),Cn(),"recaptchaContainer"),W("recaptchaParameters",!0),En()]);Z(a,"ActionCodeURL",qf,[]);firebase.INTERNAL.registerService("auth",function(b,c){b=new Km(b);c({INTERNAL:{getUid:t(b.getUid,b),getToken:t(b.cc,b),addAuthTokenListener:t(b.Wb,b),removeAuthTokenListener:t(b.Ec,b)}});return b},a,function(b,c){if("create"===b)try{c.auth();}catch(d){}});firebase.INTERNAL.extendNamespace({User:Q});}else throw Error("Cannot find the firebase namespace; be sure to include firebase-app.js before this library.");
-})();}).apply(typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {});
+(function(){if("undefined"!==typeof firebase$1&&firebase$1.INTERNAL&&firebase$1.INTERNAL.registerComponent){var a={ActionCodeInfo:{Operation:{EMAIL_SIGNIN:hf,PASSWORD_RESET:"PASSWORD_RESET",RECOVER_EMAIL:"RECOVER_EMAIL",VERIFY_EMAIL:"VERIFY_EMAIL"}},Auth:Km,AuthCredential:jg,Error:M};Z(a,"EmailAuthProvider",Gg,[]);Z(a,"FacebookAuthProvider",xg,[]);Z(a,"GithubAuthProvider",zg,[]);Z(a,"GoogleAuthProvider",Bg,[]);Z(a,"TwitterAuthProvider",Dg,[]);Z(a,"OAuthProvider",O,[V("providerId")]);Z(a,"SAMLAuthProvider",
+wg,[V("providerId")]);Z(a,"PhoneAuthProvider",Tg,[Dn()]);Z(a,"RecaptchaVerifier",wn,[X(V(),Cn(),"recaptchaContainer"),W("recaptchaParameters",!0),En()]);Z(a,"ActionCodeURL",qf,[]);firebase$1.INTERNAL.registerComponent({name:"auth",instanceFactory:function(b){b=b.getProvider("app").getImmediate();return new Km(b)},multipleInstances:!1,serviceProps:a,instantiationMode:"LAZY",type:"PUBLIC"});firebase$1.INTERNAL.registerComponent({name:"auth-internal",instanceFactory:function(b){b=b.getProvider("auth").getImmediate();
+return {getUid:t(b.getUid,b),getToken:t(b.cc,b),addAuthTokenListener:t(b.Wb,b),removeAuthTokenListener:t(b.Ec,b)}},multipleInstances:!1,instantiationMode:"LAZY",type:"PRIVATE"});firebase$1.INTERNAL.extendNamespace({User:Q});}else throw Error("Cannot find the firebase namespace; be sure to include firebase-app.js before this library.");})();}).apply(typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {});
 
 //# sourceMappingURL=auth.esm.js.map
 
@@ -1702,7 +2029,7 @@ var tmp_5 = tmp.XhrIo;
  * limitations under the License.
  */
 /** The semver (www.semver.org) version of the SDK. */
-var SDK_VERSION = firebase.SDK_VERSION;
+var SDK_VERSION = firebase$1.SDK_VERSION;
 
 /**
  * @license
@@ -2437,6 +2764,11 @@ function invalidClassError(functionName, type, position, argument) {
     return new FirestoreError(Code.INVALID_ARGUMENT, "Function " + functionName + "() requires its " + ordinal(position) + " " +
         ("argument to be a " + type + ", but it was: " + description));
 }
+function validatePositiveNumber(functionName, position, n) {
+    if (n <= 0) {
+        throw new FirestoreError(Code.INVALID_ARGUMENT, "Function \"" + functionName + "()\" requires its " + ordinal(position) + " argument to be a positive number, but it was: " + n + ".");
+    }
+}
 /** Converts a number to its english word representation */
 function ordinal(num) {
     switch (num) {
@@ -3108,7 +3440,7 @@ var DocumentKey = /** @class */ (function () {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var Deferred = /** @class */ (function () {
+var Deferred$1 = /** @class */ (function () {
     function Deferred() {
         var _this = this;
         this.promise = new Promise(function (resolve, reject) {
@@ -3189,7 +3521,7 @@ var DelayedOperation = /** @class */ (function () {
         this.targetTimeMs = targetTimeMs;
         this.op = op;
         this.removalCallback = removalCallback;
-        this.deferred = new Deferred();
+        this.deferred = new Deferred$1();
         this.then = this.deferred.promise.then.bind(this.deferred.promise);
         this.catch = this.deferred.promise.catch.bind(this.deferred.promise);
         // It's normal for the deferred promise to be canceled (due to cancellation)
@@ -5115,7 +5447,7 @@ var SimpleDbTransaction = /** @class */ (function () {
         /**
          * A promise that resolves with the result of the IndexedDb transaction.
          */
-        this.completionDeferred = new Deferred();
+        this.completionDeferred = new Deferred$1();
         this.transaction.oncomplete = function () {
             _this.completionDeferred.resolve();
         };
@@ -5950,7 +6282,7 @@ var TargetIdGenerator = /** @class */ (function () {
         assert((targetId & RESERVED_BITS) === this.generatorId, 'Cannot supply target ID from different generator ID');
         this.nextId = targetId;
     };
-    TargetIdGenerator.forQueryCache = function () {
+    TargetIdGenerator.forTargetCache = function () {
         // We seed the query cache generator to return '2' as its first ID, as there
         // is no differentiation in the protocol layer between an unset number and
         // the number '0'. If we were to sent a target with target ID '0', the
@@ -5981,34 +6313,34 @@ var TargetIdGenerator = /** @class */ (function () {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var IndexedDbQueryCache = /** @class */ (function () {
-    function IndexedDbQueryCache(referenceDelegate, serializer) {
+var IndexedDbTargetCache = /** @class */ (function () {
+    function IndexedDbTargetCache(referenceDelegate, serializer) {
         this.referenceDelegate = referenceDelegate;
         this.serializer = serializer;
-        // PORTING NOTE: We don't cache global metadata for the query cache, since
+        // PORTING NOTE: We don't cache global metadata for the target cache, since
         // some of it (in particular `highestTargetId`) can be modified by secondary
         // tabs. We could perhaps be more granular (and e.g. still cache
         // `lastRemoteSnapshotVersion` in memory) but for simplicity we currently go
         // to IndexedDb whenever we need to read metadata. We can revisit if it turns
         // out to have a meaningful performance impact.
-        this.targetIdGenerator = TargetIdGenerator.forQueryCache();
+        this.targetIdGenerator = TargetIdGenerator.forTargetCache();
     }
-    IndexedDbQueryCache.prototype.allocateTargetId = function (transaction) {
+    IndexedDbTargetCache.prototype.allocateTargetId = function (transaction) {
         var _this = this;
         return this.retrieveMetadata(transaction).next(function (metadata) {
             metadata.highestTargetId = _this.targetIdGenerator.after(metadata.highestTargetId);
             return _this.saveMetadata(transaction, metadata).next(function () { return metadata.highestTargetId; });
         });
     };
-    IndexedDbQueryCache.prototype.getLastRemoteSnapshotVersion = function (transaction) {
+    IndexedDbTargetCache.prototype.getLastRemoteSnapshotVersion = function (transaction) {
         return this.retrieveMetadata(transaction).next(function (metadata) {
             return SnapshotVersion.fromTimestamp(new Timestamp(metadata.lastRemoteSnapshotVersion.seconds, metadata.lastRemoteSnapshotVersion.nanoseconds));
         });
     };
-    IndexedDbQueryCache.prototype.getHighestSequenceNumber = function (transaction) {
+    IndexedDbTargetCache.prototype.getHighestSequenceNumber = function (transaction) {
         return getHighestListenSequenceNumber(transaction.simpleDbTransaction);
     };
-    IndexedDbQueryCache.prototype.setTargetsMetadata = function (transaction, highestListenSequenceNumber, lastRemoteSnapshotVersion) {
+    IndexedDbTargetCache.prototype.setTargetsMetadata = function (transaction, highestListenSequenceNumber, lastRemoteSnapshotVersion) {
         var _this = this;
         return this.retrieveMetadata(transaction).next(function (metadata) {
             metadata.highestListenSequenceNumber = highestListenSequenceNumber;
@@ -6021,26 +6353,26 @@ var IndexedDbQueryCache = /** @class */ (function () {
             return _this.saveMetadata(transaction, metadata);
         });
     };
-    IndexedDbQueryCache.prototype.addQueryData = function (transaction, queryData) {
+    IndexedDbTargetCache.prototype.addTargetData = function (transaction, targetData) {
         var _this = this;
-        return this.saveQueryData(transaction, queryData).next(function () {
+        return this.saveTargetData(transaction, targetData).next(function () {
             return _this.retrieveMetadata(transaction).next(function (metadata) {
                 metadata.targetCount += 1;
-                _this.updateMetadataFromQueryData(queryData, metadata);
+                _this.updateMetadataFromTargetData(targetData, metadata);
                 return _this.saveMetadata(transaction, metadata);
             });
         });
     };
-    IndexedDbQueryCache.prototype.updateQueryData = function (transaction, queryData) {
-        return this.saveQueryData(transaction, queryData);
+    IndexedDbTargetCache.prototype.updateTargetData = function (transaction, targetData) {
+        return this.saveTargetData(transaction, targetData);
     };
-    IndexedDbQueryCache.prototype.removeQueryData = function (transaction, queryData) {
+    IndexedDbTargetCache.prototype.removeTargetData = function (transaction, targetData) {
         var _this = this;
-        return this.removeMatchingKeysForTargetId(transaction, queryData.targetId)
-            .next(function () { return targetsStore(transaction).delete(queryData.targetId); })
+        return this.removeMatchingKeysForTargetId(transaction, targetData.targetId)
+            .next(function () { return targetsStore(transaction).delete(targetData.targetId); })
             .next(function () { return _this.retrieveMetadata(transaction); })
             .next(function (metadata) {
-            assert(metadata.targetCount > 0, 'Removing from an empty query cache');
+            assert(metadata.targetCount > 0, 'Removing from an empty target cache');
             metadata.targetCount -= 1;
             return _this.saveMetadata(transaction, metadata);
         });
@@ -6050,82 +6382,82 @@ var IndexedDbQueryCache = /** @class */ (function () {
      * present in `activeTargetIds`. Document associations for the removed targets are also removed.
      * Returns the number of targets removed.
      */
-    IndexedDbQueryCache.prototype.removeTargets = function (txn, upperBound, activeTargetIds) {
+    IndexedDbTargetCache.prototype.removeTargets = function (txn, upperBound, activeTargetIds) {
         var _this = this;
         var count = 0;
         var promises = [];
         return targetsStore(txn)
             .iterate(function (key, value) {
-            var queryData = _this.serializer.fromDbTarget(value);
-            if (queryData.sequenceNumber <= upperBound &&
-                activeTargetIds.get(queryData.targetId) === null) {
+            var targetData = _this.serializer.fromDbTarget(value);
+            if (targetData.sequenceNumber <= upperBound &&
+                activeTargetIds.get(targetData.targetId) === null) {
                 count++;
-                promises.push(_this.removeQueryData(txn, queryData));
+                promises.push(_this.removeTargetData(txn, targetData));
             }
         })
             .next(function () { return PersistencePromise.waitFor(promises); })
             .next(function () { return count; });
     };
     /**
-     * Call provided function with each `QueryData` that we have cached.
+     * Call provided function with each `TargetData` that we have cached.
      */
-    IndexedDbQueryCache.prototype.forEachTarget = function (txn, f) {
+    IndexedDbTargetCache.prototype.forEachTarget = function (txn, f) {
         var _this = this;
         return targetsStore(txn).iterate(function (key, value) {
-            var queryData = _this.serializer.fromDbTarget(value);
-            f(queryData);
+            var targetData = _this.serializer.fromDbTarget(value);
+            f(targetData);
         });
     };
-    IndexedDbQueryCache.prototype.retrieveMetadata = function (transaction) {
+    IndexedDbTargetCache.prototype.retrieveMetadata = function (transaction) {
         return retrieveMetadata(transaction.simpleDbTransaction);
     };
-    IndexedDbQueryCache.prototype.saveMetadata = function (transaction, metadata) {
+    IndexedDbTargetCache.prototype.saveMetadata = function (transaction, metadata) {
         return globalTargetStore(transaction).put(DbTargetGlobal.key, metadata);
     };
-    IndexedDbQueryCache.prototype.saveQueryData = function (transaction, queryData) {
-        return targetsStore(transaction).put(this.serializer.toDbTarget(queryData));
+    IndexedDbTargetCache.prototype.saveTargetData = function (transaction, targetData) {
+        return targetsStore(transaction).put(this.serializer.toDbTarget(targetData));
     };
     /**
      * In-place updates the provided metadata to account for values in the given
-     * QueryData. Saving is done separately. Returns true if there were any
+     * TargetData. Saving is done separately. Returns true if there were any
      * changes to the metadata.
      */
-    IndexedDbQueryCache.prototype.updateMetadataFromQueryData = function (queryData, metadata) {
+    IndexedDbTargetCache.prototype.updateMetadataFromTargetData = function (targetData, metadata) {
         var updated = false;
-        if (queryData.targetId > metadata.highestTargetId) {
-            metadata.highestTargetId = queryData.targetId;
+        if (targetData.targetId > metadata.highestTargetId) {
+            metadata.highestTargetId = targetData.targetId;
             updated = true;
         }
-        if (queryData.sequenceNumber > metadata.highestListenSequenceNumber) {
-            metadata.highestListenSequenceNumber = queryData.sequenceNumber;
+        if (targetData.sequenceNumber > metadata.highestListenSequenceNumber) {
+            metadata.highestListenSequenceNumber = targetData.sequenceNumber;
             updated = true;
         }
         return updated;
     };
-    IndexedDbQueryCache.prototype.getQueryCount = function (transaction) {
+    IndexedDbTargetCache.prototype.getTargetCount = function (transaction) {
         return this.retrieveMetadata(transaction).next(function (metadata) { return metadata.targetCount; });
     };
-    IndexedDbQueryCache.prototype.getQueryData = function (transaction, query) {
+    IndexedDbTargetCache.prototype.getTargetData = function (transaction, target) {
         var _this = this;
         // Iterating by the canonicalId may yield more than one result because
         // canonicalId values are not required to be unique per target. This query
         // depends on the queryTargets index to be efficient.
-        var canonicalId = query.canonicalId();
+        var canonicalId = target.canonicalId();
         var range = IDBKeyRange.bound([canonicalId, Number.NEGATIVE_INFINITY], [canonicalId, Number.POSITIVE_INFINITY]);
         var result = null;
         return targetsStore(transaction)
             .iterate({ range: range, index: DbTarget.queryTargetsIndexName }, function (key, value, control) {
             var found = _this.serializer.fromDbTarget(value);
-            // After finding a potential match, check that the query is
-            // actually equal to the requested query.
-            if (query.isEqual(found.query)) {
+            // After finding a potential match, check that the target is
+            // actually equal to the requested target.
+            if (target.isEqual(found.target)) {
                 result = found;
                 control.done();
             }
         })
             .next(function () { return result; });
     };
-    IndexedDbQueryCache.prototype.addMatchingKeys = function (txn, keys, targetId) {
+    IndexedDbTargetCache.prototype.addMatchingKeys = function (txn, keys, targetId) {
         var _this = this;
         // PORTING NOTE: The reverse index (documentsTargets) is maintained by
         // IndexedDb.
@@ -6138,7 +6470,7 @@ var IndexedDbQueryCache = /** @class */ (function () {
         });
         return PersistencePromise.waitFor(promises);
     };
-    IndexedDbQueryCache.prototype.removeMatchingKeys = function (txn, keys, targetId) {
+    IndexedDbTargetCache.prototype.removeMatchingKeys = function (txn, keys, targetId) {
         var _this = this;
         // PORTING NOTE: The reverse index (documentsTargets) is maintained by
         // IndexedDb.
@@ -6151,14 +6483,14 @@ var IndexedDbQueryCache = /** @class */ (function () {
             ]);
         });
     };
-    IndexedDbQueryCache.prototype.removeMatchingKeysForTargetId = function (txn, targetId) {
+    IndexedDbTargetCache.prototype.removeMatchingKeysForTargetId = function (txn, targetId) {
         var store = documentTargetStore(txn);
         var range = IDBKeyRange.bound([targetId], [targetId + 1], 
         /*lowerOpen=*/ false, 
         /*upperOpen=*/ true);
         return store.delete(range);
     };
-    IndexedDbQueryCache.prototype.getMatchingKeysForTargetId = function (txn, targetId) {
+    IndexedDbTargetCache.prototype.getMatchingKeysForTargetId = function (txn, targetId) {
         var range = IDBKeyRange.bound([targetId], [targetId + 1], 
         /*lowerOpen=*/ false, 
         /*upperOpen=*/ true);
@@ -6172,7 +6504,7 @@ var IndexedDbQueryCache = /** @class */ (function () {
         })
             .next(function () { return result; });
     };
-    IndexedDbQueryCache.prototype.containsKey = function (txn, key) {
+    IndexedDbTargetCache.prototype.containsKey = function (txn, key) {
         var path = encode(key.path);
         var range = IDBKeyRange.bound([path], [immediateSuccessor(path)], 
         /*lowerOpen=*/ false, 
@@ -6186,7 +6518,7 @@ var IndexedDbQueryCache = /** @class */ (function () {
         }, function (_a, _, control) {
             var targetId = _a[0], path = _a[1];
             // Having a sentinel row for a document does not count as containing that document;
-            // For the query cache, containing the document means the document is part of some
+            // For the target cache, containing the document means the document is part of some
             // target.
             if (targetId !== 0) {
                 count++;
@@ -6195,7 +6527,7 @@ var IndexedDbQueryCache = /** @class */ (function () {
         })
             .next(function () { return count > 0; });
     };
-    IndexedDbQueryCache.prototype.getQueryDataForTarget = function (transaction, targetId) {
+    IndexedDbTargetCache.prototype.getTargetDataForTarget = function (transaction, targetId) {
         var _this = this;
         return targetsStore(transaction)
             .get(targetId)
@@ -6208,7 +6540,7 @@ var IndexedDbQueryCache = /** @class */ (function () {
             }
         });
     };
-    return IndexedDbQueryCache;
+    return IndexedDbTargetCache;
 }());
 /**
  * Helper to get a typed SimpleDbStore for the queries object store.
@@ -6689,9 +7021,8 @@ var TransformMutation = /** @class */ (function (_super) {
      */
     TransformMutation.prototype.requireDocument = function (maybeDoc) {
         assert(maybeDoc instanceof Document, 'Unknown MaybeDocument type ' + maybeDoc);
-        var doc = maybeDoc;
-        assert(doc.key.isEqual(this.key), 'Can only transform a document with the same key');
-        return doc;
+        assert(maybeDoc.key.isEqual(this.key), 'Can only transform a document with the same key');
+        return maybeDoc;
     };
     /**
      * Creates a list of "transform results" (a transform result is a field value
@@ -9299,55 +9630,55 @@ function collectionParentsStore(txn) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/** An enumeration of the different purposes we have for queries. */
-var QueryPurpose;
-(function (QueryPurpose) {
-    /** A regular, normal query. */
-    QueryPurpose[QueryPurpose["Listen"] = 0] = "Listen";
+/** An enumeration of the different purposes we have for targets. */
+var TargetPurpose;
+(function (TargetPurpose) {
+    /** A regular, normal query target. */
+    TargetPurpose[TargetPurpose["Listen"] = 0] = "Listen";
     /**
-     * The query was used to refill a query after an existence filter mismatch.
+     * The query target was used to refill a query after an existence filter mismatch.
      */
-    QueryPurpose[QueryPurpose["ExistenceFilterMismatch"] = 1] = "ExistenceFilterMismatch";
-    /** The query was used to resolve a limbo document. */
-    QueryPurpose[QueryPurpose["LimboResolution"] = 2] = "LimboResolution";
-})(QueryPurpose || (QueryPurpose = {}));
+    TargetPurpose[TargetPurpose["ExistenceFilterMismatch"] = 1] = "ExistenceFilterMismatch";
+    /** The query target was used to resolve a limbo document. */
+    TargetPurpose[TargetPurpose["LimboResolution"] = 2] = "LimboResolution";
+})(TargetPurpose || (TargetPurpose = {}));
 /**
- * An immutable set of metadata that the local store tracks for each query.
+ * An immutable set of metadata that the local store tracks for each target.
  */
-var QueryData = /** @class */ (function () {
-    function QueryData(
-    /** The query being listened to. */
-    query, 
+var TargetData = /** @class */ (function () {
+    function TargetData(
+    /** The target being listened to. */
+    target, 
     /**
-     * The target ID to which the query corresponds; Assigned by the
+     * The target ID to which the target corresponds; Assigned by the
      * LocalStore for user listens and by the SyncEngine for limbo watches.
      */
     targetId, 
-    /** The purpose of the query. */
+    /** The purpose of the target. */
     purpose, 
     /**
-     * The sequence number of the last transaction during which this query data
+     * The sequence number of the last transaction during which this target data
      * was modified.
      */
     sequenceNumber, 
     /** The latest snapshot version seen for this target. */
     snapshotVersion, 
     /**
-     * The maximum snapshot version at which the associated query view
+     * The maximum snapshot version at which the associated view
      * contained no limbo documents.
      */
     lastLimboFreeSnapshotVersion, 
     /**
-     * An opaque, server-assigned token that allows watching a query to be
+     * An opaque, server-assigned token that allows watching a target to be
      * resumed after disconnecting without retransmitting all the data that
-     * matches the query. The resume token essentially identifies a point in
+     * matches the target. The resume token essentially identifies a point in
      * time from which the server should resume sending results.
      */
     resumeToken) {
         if (snapshotVersion === void 0) { snapshotVersion = SnapshotVersion.MIN; }
         if (lastLimboFreeSnapshotVersion === void 0) { lastLimboFreeSnapshotVersion = SnapshotVersion.MIN; }
         if (resumeToken === void 0) { resumeToken = emptyByteString(); }
-        this.query = query;
+        this.target = target;
         this.targetId = targetId;
         this.purpose = purpose;
         this.sequenceNumber = sequenceNumber;
@@ -9355,34 +9686,34 @@ var QueryData = /** @class */ (function () {
         this.lastLimboFreeSnapshotVersion = lastLimboFreeSnapshotVersion;
         this.resumeToken = resumeToken;
     }
-    /** Creates a new query data instance with an updated sequence number. */
-    QueryData.prototype.withSequenceNumber = function (sequenceNumber) {
-        return new QueryData(this.query, this.targetId, this.purpose, sequenceNumber, this.snapshotVersion, this.lastLimboFreeSnapshotVersion, this.resumeToken);
+    /** Creates a new target data instance with an updated sequence number. */
+    TargetData.prototype.withSequenceNumber = function (sequenceNumber) {
+        return new TargetData(this.target, this.targetId, this.purpose, sequenceNumber, this.snapshotVersion, this.lastLimboFreeSnapshotVersion, this.resumeToken);
     };
     /**
-     * Creates a new query data instance with an updated resume token and
+     * Creates a new target data instance with an updated resume token and
      * snapshot version.
      */
-    QueryData.prototype.withResumeToken = function (resumeToken, snapshotVersion) {
-        return new QueryData(this.query, this.targetId, this.purpose, this.sequenceNumber, snapshotVersion, this.lastLimboFreeSnapshotVersion, resumeToken);
+    TargetData.prototype.withResumeToken = function (resumeToken, snapshotVersion) {
+        return new TargetData(this.target, this.targetId, this.purpose, this.sequenceNumber, snapshotVersion, this.lastLimboFreeSnapshotVersion, resumeToken);
     };
     /**
-     * Creates a new query data instance with an updated last limbo free
+     * Creates a new target data instance with an updated last limbo free
      * snapshot version number.
      */
-    QueryData.prototype.withLastLimboFreeSnapshotVersion = function (lastLimboFreeSnapshotVersion) {
-        return new QueryData(this.query, this.targetId, this.purpose, this.sequenceNumber, this.snapshotVersion, lastLimboFreeSnapshotVersion, this.resumeToken);
+    TargetData.prototype.withLastLimboFreeSnapshotVersion = function (lastLimboFreeSnapshotVersion) {
+        return new TargetData(this.target, this.targetId, this.purpose, this.sequenceNumber, this.snapshotVersion, lastLimboFreeSnapshotVersion, this.resumeToken);
     };
-    QueryData.prototype.isEqual = function (other) {
+    TargetData.prototype.isEqual = function (other) {
         return (this.targetId === other.targetId &&
             this.purpose === other.purpose &&
             this.sequenceNumber === other.sequenceNumber &&
             this.snapshotVersion.isEqual(other.snapshotVersion) &&
             this.lastLimboFreeSnapshotVersion.isEqual(other.lastLimboFreeSnapshotVersion) &&
             this.resumeToken === other.resumeToken &&
-            this.query.isEqual(other.query));
+            this.target.isEqual(other.target));
     };
-    return QueryData;
+    return TargetData;
 }());
 
 /**
@@ -9518,7 +9849,7 @@ var LocalSerializer = /** @class */ (function () {
         }
         return keys;
     };
-    /** Decodes a DbTarget into QueryData */
+    /** Decodes a DbTarget into TargetData */
     LocalSerializer.prototype.fromDbTarget = function (dbTarget) {
         var version = this.fromDbTimestamp(dbTarget.readTime);
         var lastLimboFreeSnapshotVersion = dbTarget.lastLimboFreeSnapshotVersion !== undefined
@@ -9526,41 +9857,41 @@ var LocalSerializer = /** @class */ (function () {
             : SnapshotVersion.MIN;
         // TODO(b/140573486): Convert to platform representation
         var resumeToken = dbTarget.resumeToken;
-        var query;
+        var target;
         if (isDocumentQuery(dbTarget.query)) {
-            query = this.remoteSerializer.fromDocumentsTarget(dbTarget.query);
+            target = this.remoteSerializer.fromDocumentsTarget(dbTarget.query);
         }
         else {
-            query = this.remoteSerializer.fromQueryTarget(dbTarget.query);
+            target = this.remoteSerializer.fromQueryTarget(dbTarget.query);
         }
-        return new QueryData(query, dbTarget.targetId, QueryPurpose.Listen, dbTarget.lastListenSequenceNumber, version, lastLimboFreeSnapshotVersion, resumeToken);
+        return new TargetData(target, dbTarget.targetId, TargetPurpose.Listen, dbTarget.lastListenSequenceNumber, version, lastLimboFreeSnapshotVersion, resumeToken);
     };
-    /** Encodes QueryData into a DbTarget for storage locally. */
-    LocalSerializer.prototype.toDbTarget = function (queryData) {
-        assert(QueryPurpose.Listen === queryData.purpose, 'Only queries with purpose ' +
-            QueryPurpose.Listen +
+    /** Encodes TargetData into a DbTarget for storage locally. */
+    LocalSerializer.prototype.toDbTarget = function (targetData) {
+        assert(TargetPurpose.Listen === targetData.purpose, 'Only queries with purpose ' +
+            TargetPurpose.Listen +
             ' may be stored, got ' +
-            queryData.purpose);
-        var dbTimestamp = this.toDbTimestamp(queryData.snapshotVersion);
-        var dbLastLimboFreeTimestamp = this.toDbTimestamp(queryData.lastLimboFreeSnapshotVersion);
+            targetData.purpose);
+        var dbTimestamp = this.toDbTimestamp(targetData.snapshotVersion);
+        var dbLastLimboFreeTimestamp = this.toDbTimestamp(targetData.lastLimboFreeSnapshotVersion);
         var queryProto;
-        if (queryData.query.isDocumentQuery()) {
-            queryProto = this.remoteSerializer.toDocumentsTarget(queryData.query);
+        if (targetData.target.isDocumentQuery()) {
+            queryProto = this.remoteSerializer.toDocumentsTarget(targetData.target);
         }
         else {
-            queryProto = this.remoteSerializer.toQueryTarget(queryData.query);
+            queryProto = this.remoteSerializer.toQueryTarget(targetData.target);
         }
         var resumeToken;
-        if (queryData.resumeToken instanceof Uint8Array) {
+        if (targetData.resumeToken instanceof Uint8Array) {
             // TODO(b/78771403): Convert tokens to strings during deserialization
             assert(SimpleDb.isMockPersistence(), 'Persisting non-string stream tokens is only supported with mock persistence .');
-            resumeToken = queryData.resumeToken.toString();
+            resumeToken = targetData.resumeToken.toString();
         }
         else {
-            resumeToken = queryData.resumeToken;
+            resumeToken = targetData.resumeToken;
         }
         // lastListenSequenceNumber is always 0 until we do real GC.
-        return new DbTarget(queryData.targetId, queryData.query.canonicalId(), dbTimestamp, resumeToken, queryData.sequenceNumber, dbLastLimboFreeTimestamp, queryProto);
+        return new DbTarget(targetData.targetId, targetData.target.canonicalId(), dbTimestamp, resumeToken, targetData.sequenceNumber, dbLastLimboFreeTimestamp, queryProto);
     };
     return LocalSerializer;
 }());
@@ -10010,7 +10341,7 @@ var IndexedDbPersistence = /** @class */ (function () {
         this.dbName = persistenceKey + IndexedDbPersistence.MAIN_DATABASE;
         this.serializer = new LocalSerializer(serializer);
         this.document = platform.document;
-        this.queryCache = new IndexedDbQueryCache(this.referenceDelegate, this.serializer);
+        this.targetCache = new IndexedDbTargetCache(this.referenceDelegate, this.serializer);
         this.indexManager = new IndexedDbIndexManager();
         this.remoteDocumentCache = new IndexedDbRemoteDocumentCache(this.serializer, this.indexManager);
         if (platform.window && platform.window.localStorage) {
@@ -10412,9 +10743,9 @@ var IndexedDbPersistence = /** @class */ (function () {
         assert(this.started, 'Cannot initialize MutationQueue before persistence is started.');
         return IndexedDbMutationQueue.forUser(user, this.serializer, this.indexManager, this.referenceDelegate);
     };
-    IndexedDbPersistence.prototype.getQueryCache = function () {
-        assert(this.started, 'Cannot initialize QueryCache before persistence is started.');
-        return this.queryCache;
+    IndexedDbPersistence.prototype.getTargetCache = function () {
+        assert(this.started, 'Cannot initialize TargetCache before persistence is started.');
+        return this.targetCache;
     };
     IndexedDbPersistence.prototype.getRemoteDocumentCache = function () {
         assert(this.started, 'Cannot initialize RemoteDocumentCache before persistence is started.');
@@ -10714,7 +11045,7 @@ var IndexedDbLruDelegate = /** @class */ (function () {
     }
     IndexedDbLruDelegate.prototype.getSequenceNumberCount = function (txn) {
         var docCountPromise = this.orphanedDocmentCount(txn);
-        var targetCountPromise = this.db.getQueryCache().getQueryCount(txn);
+        var targetCountPromise = this.db.getTargetCache().getTargetCount(txn);
         return targetCountPromise.next(function (targetCount) {
             return docCountPromise.next(function (docCount) { return targetCount + docCount; });
         });
@@ -10726,7 +11057,7 @@ var IndexedDbLruDelegate = /** @class */ (function () {
         }).next(function () { return orphanedCount; });
     };
     IndexedDbLruDelegate.prototype.forEachTarget = function (txn, f) {
-        return this.db.getQueryCache().forEachTarget(txn, f);
+        return this.db.getTargetCache().forEachTarget(txn, f);
     };
     IndexedDbLruDelegate.prototype.forEachOrphanedDocumentSequenceNumber = function (txn, f) {
         return this.forEachOrphanedDocument(txn, function (docKey, sequenceNumber) {
@@ -10744,7 +11075,7 @@ var IndexedDbLruDelegate = /** @class */ (function () {
     };
     IndexedDbLruDelegate.prototype.removeTargets = function (txn, upperBound, activeTargetIds) {
         return this.db
-            .getQueryCache()
+            .getTargetCache()
             .removeTargets(txn, upperBound, activeTargetIds);
     };
     IndexedDbLruDelegate.prototype.removeMutationReference = function (txn, key) {
@@ -10791,9 +11122,9 @@ var IndexedDbLruDelegate = /** @class */ (function () {
             .next(function () { return changeBuffer.apply(txn); })
             .next(function () { return documentCount; });
     };
-    IndexedDbLruDelegate.prototype.removeTarget = function (txn, queryData) {
-        var updated = queryData.withSequenceNumber(txn.currentSequenceNumber);
-        return this.db.getQueryCache().updateQueryData(txn, updated);
+    IndexedDbLruDelegate.prototype.removeTarget = function (txn, targetData) {
+        var updated = targetData.withSequenceNumber(txn.currentSequenceNumber);
+        return this.db.getTargetCache().updateTargetData(txn, updated);
     };
     IndexedDbLruDelegate.prototype.updateLimboDocument = function (txn, key) {
         return writeSentinelKey(txn, key);
@@ -10860,6 +11191,1022 @@ function sentinelRow(key, sequenceNumber) {
 function writeSentinelKey(txn, key) {
     return documentTargetStore(txn).put(sentinelRow(key, txn.currentSequenceNumber));
 }
+
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// Untyped Number alias we can use to check for ES6 methods / properties.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+var NumberAsAny = Number;
+/**
+ * Minimum safe integer in Javascript because of floating point precision.
+ * Added to not rely on ES6 features.
+ */
+var MIN_SAFE_INTEGER = NumberAsAny.MIN_SAFE_INTEGER || -(Math.pow(2, 53) - 1);
+/**
+ * Maximum safe integer in Javascript because of floating point precision.
+ * Added to not rely on ES6 features.
+ */
+var MAX_SAFE_INTEGER = NumberAsAny.MAX_SAFE_INTEGER || Math.pow(2, 53) - 1;
+/**
+ * Returns whether an number is an integer, uses native implementation if
+ * available.
+ * Added to not rely on ES6 features.
+ * @param value The value to test for being an integer
+ */
+var isInteger = NumberAsAny.isInteger ||
+    (function (value) {
+        return typeof value === 'number' &&
+            isFinite(value) &&
+            Math.floor(value) === value;
+    });
+/**
+ * Returns whether a variable is either undefined or null.
+ */
+function isNullOrUndefined(value) {
+    return value === null || value === undefined;
+}
+/**
+ * Returns whether a value is an integer and in the safe integer range
+ * @param value The value to test for being an integer and in the safe range
+ */
+function isSafeInteger(value) {
+    return (isInteger(value) &&
+        value <= MAX_SAFE_INTEGER &&
+        value >= MIN_SAFE_INTEGER);
+}
+
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * A Target represents the WatchTarget representation of a Query, which is used
+ * by the LocalStore and the RemoteStore to keep track of and to execute
+ * backend queries. While a Query can represent multiple Targets, each Targets
+ * maps to a single WatchTarget in RemoteStore and a single TargetData entry
+ * in persistence.
+ */
+var Target = /** @class */ (function () {
+    /**
+     * Initializes a Target with a path and optional additional query constraints.
+     * Path must currently be empty if this is a collection group query.
+     *
+     * NOTE: you should always construct `Target` from `Query.toTarget` instead of
+     * using this constructor, because `Query` provides an implicit `orderBy`
+     * property.
+     */
+    function Target(path, collectionGroup, orderBy, filters, limit, startAt, endAt) {
+        if (collectionGroup === void 0) { collectionGroup = null; }
+        if (orderBy === void 0) { orderBy = []; }
+        if (filters === void 0) { filters = []; }
+        if (limit === void 0) { limit = null; }
+        if (startAt === void 0) { startAt = null; }
+        if (endAt === void 0) { endAt = null; }
+        this.path = path;
+        this.collectionGroup = collectionGroup;
+        this.orderBy = orderBy;
+        this.filters = filters;
+        this.limit = limit;
+        this.startAt = startAt;
+        this.endAt = endAt;
+        this.memoizedCanonicalId = null;
+    }
+    Target.prototype.canonicalId = function () {
+        if (this.memoizedCanonicalId === null) {
+            var canonicalId = this.path.canonicalString();
+            if (this.collectionGroup !== null) {
+                canonicalId += '|cg:' + this.collectionGroup;
+            }
+            canonicalId += '|f:';
+            for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
+                var filter = _a[_i];
+                canonicalId += filter.canonicalId();
+                canonicalId += ',';
+            }
+            canonicalId += '|ob:';
+            // TODO(dimond): make this collision resistant
+            for (var _b = 0, _c = this.orderBy; _b < _c.length; _b++) {
+                var orderBy = _c[_b];
+                canonicalId += orderBy.canonicalId();
+                canonicalId += ',';
+            }
+            if (!isNullOrUndefined(this.limit)) {
+                canonicalId += '|l:';
+                canonicalId += this.limit;
+            }
+            if (this.startAt) {
+                canonicalId += '|lb:';
+                canonicalId += this.startAt.canonicalId();
+            }
+            if (this.endAt) {
+                canonicalId += '|ub:';
+                canonicalId += this.endAt.canonicalId();
+            }
+            this.memoizedCanonicalId = canonicalId;
+        }
+        return this.memoizedCanonicalId;
+    };
+    Target.prototype.toString = function () {
+        var str = this.path.canonicalString();
+        if (this.collectionGroup !== null) {
+            str += ' collectionGroup=' + this.collectionGroup;
+        }
+        if (this.filters.length > 0) {
+            str += ", filters: [" + this.filters.join(', ') + "]";
+        }
+        if (!isNullOrUndefined(this.limit)) {
+            str += ', limit: ' + this.limit;
+        }
+        if (this.orderBy.length > 0) {
+            str += ", orderBy: [" + this.orderBy.join(', ') + "]";
+        }
+        if (this.startAt) {
+            str += ', startAt: ' + this.startAt.canonicalId();
+        }
+        if (this.endAt) {
+            str += ', endAt: ' + this.endAt.canonicalId();
+        }
+        return "Target(" + str + ")";
+    };
+    Target.prototype.isEqual = function (other) {
+        if (this.limit !== other.limit) {
+            return false;
+        }
+        if (this.orderBy.length !== other.orderBy.length) {
+            return false;
+        }
+        for (var i = 0; i < this.orderBy.length; i++) {
+            if (!this.orderBy[i].isEqual(other.orderBy[i])) {
+                return false;
+            }
+        }
+        if (this.filters.length !== other.filters.length) {
+            return false;
+        }
+        for (var i = 0; i < this.filters.length; i++) {
+            if (!this.filters[i].isEqual(other.filters[i])) {
+                return false;
+            }
+        }
+        if (this.collectionGroup !== other.collectionGroup) {
+            return false;
+        }
+        if (!this.path.isEqual(other.path)) {
+            return false;
+        }
+        if (this.startAt !== null
+            ? !this.startAt.isEqual(other.startAt)
+            : other.startAt !== null) {
+            return false;
+        }
+        return this.endAt !== null
+            ? this.endAt.isEqual(other.endAt)
+            : other.endAt === null;
+    };
+    Target.prototype.isDocumentQuery = function () {
+        return (DocumentKey.isDocumentKey(this.path) &&
+            this.collectionGroup === null &&
+            this.filters.length === 0);
+    };
+    return Target;
+}());
+
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var LimitType;
+(function (LimitType) {
+    LimitType["First"] = "F";
+    LimitType["Last"] = "L";
+})(LimitType || (LimitType = {}));
+/**
+ * Query encapsulates all the query attributes we support in the SDK. It can
+ * be run against the LocalStore, as well as be converted to a `Target` to
+ * query the RemoteStore results.
+ */
+var Query = /** @class */ (function () {
+    /**
+     * Initializes a Query with a path and optional additional query constraints.
+     * Path must currently be empty if this is a collection group query.
+     */
+    function Query(path, collectionGroup, explicitOrderBy, filters, limit, limitType, startAt, endAt) {
+        if (collectionGroup === void 0) { collectionGroup = null; }
+        if (explicitOrderBy === void 0) { explicitOrderBy = []; }
+        if (filters === void 0) { filters = []; }
+        if (limit === void 0) { limit = null; }
+        if (limitType === void 0) { limitType = LimitType.First; }
+        if (startAt === void 0) { startAt = null; }
+        if (endAt === void 0) { endAt = null; }
+        this.path = path;
+        this.collectionGroup = collectionGroup;
+        this.explicitOrderBy = explicitOrderBy;
+        this.filters = filters;
+        this.limit = limit;
+        this.limitType = limitType;
+        this.startAt = startAt;
+        this.endAt = endAt;
+        this.memoizedOrderBy = null;
+        // The corresponding `Target` of this `Query` instance.
+        this.memoizedTarget = null;
+        if (this.startAt) {
+            this.assertValidBound(this.startAt);
+        }
+        if (this.endAt) {
+            this.assertValidBound(this.endAt);
+        }
+    }
+    Query.atPath = function (path) {
+        return new Query(path);
+    };
+    Object.defineProperty(Query.prototype, "orderBy", {
+        get: function () {
+            if (this.memoizedOrderBy === null) {
+                var inequalityField = this.getInequalityFilterField();
+                var firstOrderByField = this.getFirstOrderByField();
+                if (inequalityField !== null && firstOrderByField === null) {
+                    // In order to implicitly add key ordering, we must also add the
+                    // inequality filter field for it to be a valid query.
+                    // Note that the default inequality field and key ordering is ascending.
+                    if (inequalityField.isKeyField()) {
+                        this.memoizedOrderBy = [KEY_ORDERING_ASC];
+                    }
+                    else {
+                        this.memoizedOrderBy = [
+                            new OrderBy(inequalityField),
+                            KEY_ORDERING_ASC
+                        ];
+                    }
+                }
+                else {
+                    assert(inequalityField === null ||
+                        (firstOrderByField !== null &&
+                            inequalityField.isEqual(firstOrderByField)), 'First orderBy should match inequality field.');
+                    this.memoizedOrderBy = [];
+                    var foundKeyOrdering = false;
+                    for (var _i = 0, _a = this.explicitOrderBy; _i < _a.length; _i++) {
+                        var orderBy = _a[_i];
+                        this.memoizedOrderBy.push(orderBy);
+                        if (orderBy.field.isKeyField()) {
+                            foundKeyOrdering = true;
+                        }
+                    }
+                    if (!foundKeyOrdering) {
+                        // The order of the implicit key ordering always matches the last
+                        // explicit order by
+                        var lastDirection = this.explicitOrderBy.length > 0
+                            ? this.explicitOrderBy[this.explicitOrderBy.length - 1].dir
+                            : Direction.ASCENDING;
+                        this.memoizedOrderBy.push(lastDirection === Direction.ASCENDING
+                            ? KEY_ORDERING_ASC
+                            : KEY_ORDERING_DESC);
+                    }
+                }
+            }
+            return this.memoizedOrderBy;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Query.prototype.addFilter = function (filter) {
+        assert(this.getInequalityFilterField() == null ||
+            !(filter instanceof FieldFilter) ||
+            !filter.isInequality() ||
+            filter.field.isEqual(this.getInequalityFilterField()), 'Query must only have one inequality field.');
+        assert(!this.isDocumentQuery(), 'No filtering allowed for document query');
+        var newFilters = this.filters.concat([filter]);
+        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), newFilters, this.limit, this.limitType, this.startAt, this.endAt);
+    };
+    Query.prototype.addOrderBy = function (orderBy) {
+        assert(!this.startAt && !this.endAt, 'Bounds must be set after orderBy');
+        // TODO(dimond): validate that orderBy does not list the same key twice.
+        var newOrderBy = this.explicitOrderBy.concat([orderBy]);
+        return new Query(this.path, this.collectionGroup, newOrderBy, this.filters.slice(), this.limit, this.limitType, this.startAt, this.endAt);
+    };
+    Query.prototype.withLimitToFirst = function (limit) {
+        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), limit, LimitType.First, this.startAt, this.endAt);
+    };
+    Query.prototype.withLimitToLast = function (limit) {
+        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), limit, LimitType.Last, this.startAt, this.endAt);
+    };
+    Query.prototype.withStartAt = function (bound) {
+        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), this.limit, this.limitType, bound, this.endAt);
+    };
+    Query.prototype.withEndAt = function (bound) {
+        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), this.limit, this.limitType, this.startAt, bound);
+    };
+    /**
+     * Helper to convert a collection group query into a collection query at a
+     * specific path. This is used when executing collection group queries, since
+     * we have to split the query into a set of collection queries at multiple
+     * paths.
+     */
+    Query.prototype.asCollectionQueryAtPath = function (path) {
+        return new Query(path, 
+        /*collectionGroup=*/ null, this.explicitOrderBy.slice(), this.filters.slice(), this.limit, this.limitType, this.startAt, this.endAt);
+    };
+    /**
+     * Returns true if this query does not specify any query constraints that
+     * could remove results.
+     */
+    Query.prototype.matchesAllDocuments = function () {
+        return (this.filters.length === 0 &&
+            this.limit === null &&
+            this.startAt == null &&
+            this.endAt == null &&
+            (this.explicitOrderBy.length === 0 ||
+                (this.explicitOrderBy.length === 1 &&
+                    this.explicitOrderBy[0].field.isKeyField())));
+    };
+    // TODO(b/29183165): This is used to get a unique string from a query to, for
+    // example, use as a dictionary key, but the implementation is subject to
+    // collisions. Make it collision-free.
+    Query.prototype.canonicalId = function () {
+        return this.toTarget().canonicalId() + "|lt:" + this.limitType;
+    };
+    Query.prototype.toString = function () {
+        return "Query(target=" + this.toTarget().toString() + "; limitType=" + this.limitType + ")";
+    };
+    Query.prototype.isEqual = function (other) {
+        return (this.toTarget().isEqual(other.toTarget()) &&
+            this.limitType === other.limitType);
+    };
+    Query.prototype.docComparator = function (d1, d2) {
+        var comparedOnKeyField = false;
+        for (var _i = 0, _a = this.orderBy; _i < _a.length; _i++) {
+            var orderBy = _a[_i];
+            var comp = orderBy.compare(d1, d2);
+            if (comp !== 0) {
+                return comp;
+            }
+            comparedOnKeyField = comparedOnKeyField || orderBy.field.isKeyField();
+        }
+        // Assert that we actually compared by key
+        assert(comparedOnKeyField, "orderBy used that doesn't compare on key field");
+        return 0;
+    };
+    Query.prototype.matches = function (doc) {
+        return (this.matchesPathAndCollectionGroup(doc) &&
+            this.matchesOrderBy(doc) &&
+            this.matchesFilters(doc) &&
+            this.matchesBounds(doc));
+    };
+    Query.prototype.hasLimitToFirst = function () {
+        return !isNullOrUndefined(this.limit) && this.limitType === LimitType.First;
+    };
+    Query.prototype.hasLimitToLast = function () {
+        return !isNullOrUndefined(this.limit) && this.limitType === LimitType.Last;
+    };
+    Query.prototype.getFirstOrderByField = function () {
+        return this.explicitOrderBy.length > 0
+            ? this.explicitOrderBy[0].field
+            : null;
+    };
+    Query.prototype.getInequalityFilterField = function () {
+        for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
+            var filter = _a[_i];
+            if (filter instanceof FieldFilter && filter.isInequality()) {
+                return filter.field;
+            }
+        }
+        return null;
+    };
+    // Checks if any of the provided Operators are included in the query and
+    // returns the first one that is, or null if none are.
+    Query.prototype.findFilterOperator = function (operators) {
+        for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
+            var filter = _a[_i];
+            if (filter instanceof FieldFilter) {
+                if (operators.indexOf(filter.op) >= 0) {
+                    return filter.op;
+                }
+            }
+        }
+        return null;
+    };
+    Query.prototype.isDocumentQuery = function () {
+        return this.toTarget().isDocumentQuery();
+    };
+    Query.prototype.isCollectionGroupQuery = function () {
+        return this.collectionGroup !== null;
+    };
+    /**
+     * Converts this `Query` instance to it's corresponding `Target`
+     * representation.
+     */
+    Query.prototype.toTarget = function () {
+        if (!this.memoizedTarget) {
+            if (this.limitType === LimitType.First) {
+                this.memoizedTarget = new Target(this.path, this.collectionGroup, this.orderBy, this.filters, this.limit, this.startAt, this.endAt);
+            }
+            else {
+                // Flip the orderBy directions since we want the last results
+                var orderBys = [];
+                for (var _i = 0, _a = this.orderBy; _i < _a.length; _i++) {
+                    var orderBy = _a[_i];
+                    var dir = orderBy.dir === Direction.DESCENDING
+                        ? Direction.ASCENDING
+                        : Direction.DESCENDING;
+                    orderBys.push(new OrderBy(orderBy.field, dir));
+                }
+                // We need to swap the cursors to match the now-flipped query ordering.
+                var startAt = this.endAt
+                    ? new Bound(this.endAt.position, !this.endAt.before)
+                    : null;
+                var endAt = this.startAt
+                    ? new Bound(this.startAt.position, !this.startAt.before)
+                    : null;
+                // Now return as a LimitType.First query.
+                this.memoizedTarget = new Target(this.path, this.collectionGroup, orderBys, this.filters, this.limit, startAt, endAt);
+            }
+        }
+        return this.memoizedTarget;
+    };
+    Query.prototype.matchesPathAndCollectionGroup = function (doc) {
+        var docPath = doc.key.path;
+        if (this.collectionGroup !== null) {
+            // NOTE: this.path is currently always empty since we don't expose Collection
+            // Group queries rooted at a document path yet.
+            return (doc.key.hasCollectionId(this.collectionGroup) &&
+                this.path.isPrefixOf(docPath));
+        }
+        else if (DocumentKey.isDocumentKey(this.path)) {
+            // exact match for document queries
+            return this.path.isEqual(docPath);
+        }
+        else {
+            // shallow ancestor queries by default
+            return this.path.isImmediateParentOf(docPath);
+        }
+    };
+    /**
+     * A document must have a value for every ordering clause in order to show up
+     * in the results.
+     */
+    Query.prototype.matchesOrderBy = function (doc) {
+        for (var _i = 0, _a = this.explicitOrderBy; _i < _a.length; _i++) {
+            var orderBy = _a[_i];
+            // order by key always matches
+            if (!orderBy.field.isKeyField() && doc.field(orderBy.field) === null) {
+                return false;
+            }
+        }
+        return true;
+    };
+    Query.prototype.matchesFilters = function (doc) {
+        for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
+            var filter = _a[_i];
+            if (!filter.matches(doc)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    /**
+     * Makes sure a document is within the bounds, if provided.
+     */
+    Query.prototype.matchesBounds = function (doc) {
+        if (this.startAt && !this.startAt.sortsBeforeDocument(this.orderBy, doc)) {
+            return false;
+        }
+        if (this.endAt && this.endAt.sortsBeforeDocument(this.orderBy, doc)) {
+            return false;
+        }
+        return true;
+    };
+    Query.prototype.assertValidBound = function (bound) {
+        assert(bound.position.length <= this.orderBy.length, 'Bound is longer than orderBy');
+    };
+    return Query;
+}());
+var Filter = /** @class */ (function () {
+    function Filter() {
+    }
+    return Filter;
+}());
+var Operator = /** @class */ (function () {
+    function Operator(name) {
+        this.name = name;
+    }
+    Operator.fromString = function (op) {
+        switch (op) {
+            case '<':
+                return Operator.LESS_THAN;
+            case '<=':
+                return Operator.LESS_THAN_OR_EQUAL;
+            case '==':
+                return Operator.EQUAL;
+            case '>=':
+                return Operator.GREATER_THAN_OR_EQUAL;
+            case '>':
+                return Operator.GREATER_THAN;
+            case 'array-contains':
+                return Operator.ARRAY_CONTAINS;
+            case 'in':
+                return Operator.IN;
+            case 'array-contains-any':
+                return Operator.ARRAY_CONTAINS_ANY;
+            default:
+                return fail('Unknown FieldFilter operator: ' + op);
+        }
+    };
+    Operator.prototype.toString = function () {
+        return this.name;
+    };
+    Operator.prototype.isEqual = function (other) {
+        return this.name === other.name;
+    };
+    Operator.LESS_THAN = new Operator('<');
+    Operator.LESS_THAN_OR_EQUAL = new Operator('<=');
+    Operator.EQUAL = new Operator('==');
+    Operator.GREATER_THAN = new Operator('>');
+    Operator.GREATER_THAN_OR_EQUAL = new Operator('>=');
+    Operator.ARRAY_CONTAINS = new Operator('array-contains');
+    Operator.IN = new Operator('in');
+    Operator.ARRAY_CONTAINS_ANY = new Operator('array-contains-any');
+    return Operator;
+}());
+var FieldFilter = /** @class */ (function (_super) {
+    __extends(FieldFilter, _super);
+    function FieldFilter(field, op, value) {
+        var _this = _super.call(this) || this;
+        _this.field = field;
+        _this.op = op;
+        _this.value = value;
+        return _this;
+    }
+    /**
+     * Creates a filter based on the provided arguments.
+     */
+    FieldFilter.create = function (field, op, value) {
+        if (field.isKeyField()) {
+            if (op === Operator.IN) {
+                assert(value instanceof ArrayValue, 'Comparing on key with IN, but filter value not an ArrayValue');
+                assert(value.internalValue.every(function (elem) {
+                    return elem instanceof RefValue;
+                }), 'Comparing on key with IN, but an array value was not a RefValue');
+                return new KeyFieldInFilter(field, value);
+            }
+            else {
+                assert(value instanceof RefValue, 'Comparing on key, but filter value not a RefValue');
+                assert(op !== Operator.ARRAY_CONTAINS && op !== Operator.ARRAY_CONTAINS_ANY, "'" + op.toString() + "' queries don't make sense on document keys.");
+                return new KeyFieldFilter(field, op, value);
+            }
+        }
+        else if (value.isEqual(NullValue.INSTANCE)) {
+            if (op !== Operator.EQUAL) {
+                throw new FirestoreError(Code.INVALID_ARGUMENT, 'Invalid query. Null supports only equality comparisons.');
+            }
+            return new FieldFilter(field, op, value);
+        }
+        else if (value.isEqual(DoubleValue.NAN)) {
+            if (op !== Operator.EQUAL) {
+                throw new FirestoreError(Code.INVALID_ARGUMENT, 'Invalid query. NaN supports only equality comparisons.');
+            }
+            return new FieldFilter(field, op, value);
+        }
+        else if (op === Operator.ARRAY_CONTAINS) {
+            return new ArrayContainsFilter(field, value);
+        }
+        else if (op === Operator.IN) {
+            assert(value instanceof ArrayValue, 'IN filter has invalid value: ' + value.toString());
+            return new InFilter(field, value);
+        }
+        else if (op === Operator.ARRAY_CONTAINS_ANY) {
+            assert(value instanceof ArrayValue, 'ARRAY_CONTAINS_ANY filter has invalid value: ' + value.toString());
+            return new ArrayContainsAnyFilter(field, value);
+        }
+        else {
+            return new FieldFilter(field, op, value);
+        }
+    };
+    FieldFilter.prototype.matches = function (doc) {
+        var other = doc.field(this.field);
+        // Only compare types with matching backend order (such as double and int).
+        return (other !== null &&
+            this.value.typeOrder === other.typeOrder &&
+            this.matchesComparison(other.compareTo(this.value)));
+    };
+    FieldFilter.prototype.matchesComparison = function (comparison) {
+        switch (this.op) {
+            case Operator.LESS_THAN:
+                return comparison < 0;
+            case Operator.LESS_THAN_OR_EQUAL:
+                return comparison <= 0;
+            case Operator.EQUAL:
+                return comparison === 0;
+            case Operator.GREATER_THAN:
+                return comparison > 0;
+            case Operator.GREATER_THAN_OR_EQUAL:
+                return comparison >= 0;
+            default:
+                return fail('Unknown FieldFilter operator: ' + this.op);
+        }
+    };
+    FieldFilter.prototype.isInequality = function () {
+        return ([
+            Operator.LESS_THAN,
+            Operator.LESS_THAN_OR_EQUAL,
+            Operator.GREATER_THAN,
+            Operator.GREATER_THAN_OR_EQUAL
+        ].indexOf(this.op) >= 0);
+    };
+    FieldFilter.prototype.canonicalId = function () {
+        // TODO(b/29183165): Technically, this won't be unique if two values have
+        // the same description, such as the int 3 and the string "3". So we should
+        // add the types in here somehow, too.
+        return (this.field.canonicalString() + this.op.toString() + this.value.toString());
+    };
+    FieldFilter.prototype.isEqual = function (other) {
+        if (other instanceof FieldFilter) {
+            return (this.op.isEqual(other.op) &&
+                this.field.isEqual(other.field) &&
+                this.value.isEqual(other.value));
+        }
+        else {
+            return false;
+        }
+    };
+    FieldFilter.prototype.toString = function () {
+        return this.field.canonicalString() + " " + this.op + " " + this.value.value();
+    };
+    return FieldFilter;
+}(Filter));
+/** Filter that matches on key fields (i.e. '__name__'). */
+var KeyFieldFilter = /** @class */ (function (_super) {
+    __extends(KeyFieldFilter, _super);
+    function KeyFieldFilter() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    KeyFieldFilter.prototype.matches = function (doc) {
+        var refValue = this.value;
+        var comparison = DocumentKey.comparator(doc.key, refValue.key);
+        return this.matchesComparison(comparison);
+    };
+    return KeyFieldFilter;
+}(FieldFilter));
+/** Filter that matches on key fields within an array. */
+var KeyFieldInFilter = /** @class */ (function (_super) {
+    __extends(KeyFieldInFilter, _super);
+    function KeyFieldInFilter(field, value) {
+        var _this = _super.call(this, field, Operator.IN, value) || this;
+        _this.value = value;
+        return _this;
+    }
+    KeyFieldInFilter.prototype.matches = function (doc) {
+        var arrayValue = this.value;
+        return arrayValue.internalValue.some(function (refValue) {
+            return doc.key.isEqual(refValue.key);
+        });
+    };
+    return KeyFieldInFilter;
+}(FieldFilter));
+/** A Filter that implements the array-contains operator. */
+var ArrayContainsFilter = /** @class */ (function (_super) {
+    __extends(ArrayContainsFilter, _super);
+    function ArrayContainsFilter(field, value) {
+        return _super.call(this, field, Operator.ARRAY_CONTAINS, value) || this;
+    }
+    ArrayContainsFilter.prototype.matches = function (doc) {
+        var other = doc.field(this.field);
+        return other instanceof ArrayValue && other.contains(this.value);
+    };
+    return ArrayContainsFilter;
+}(FieldFilter));
+/** A Filter that implements the IN operator. */
+var InFilter = /** @class */ (function (_super) {
+    __extends(InFilter, _super);
+    function InFilter(field, value) {
+        var _this = _super.call(this, field, Operator.IN, value) || this;
+        _this.value = value;
+        return _this;
+    }
+    InFilter.prototype.matches = function (doc) {
+        var arrayValue = this.value;
+        var other = doc.field(this.field);
+        return other !== null && arrayValue.contains(other);
+    };
+    return InFilter;
+}(FieldFilter));
+/** A Filter that implements the array-contains-any operator. */
+var ArrayContainsAnyFilter = /** @class */ (function (_super) {
+    __extends(ArrayContainsAnyFilter, _super);
+    function ArrayContainsAnyFilter(field, value) {
+        var _this = _super.call(this, field, Operator.ARRAY_CONTAINS_ANY, value) || this;
+        _this.value = value;
+        return _this;
+    }
+    ArrayContainsAnyFilter.prototype.matches = function (doc) {
+        var _this = this;
+        var other = doc.field(this.field);
+        return (other instanceof ArrayValue &&
+            other.internalValue.some(function (lhsElem) {
+                return _this.value.contains(lhsElem);
+            }));
+    };
+    return ArrayContainsAnyFilter;
+}(FieldFilter));
+/**
+ * The direction of sorting in an order by.
+ */
+var Direction = /** @class */ (function () {
+    function Direction(name) {
+        this.name = name;
+    }
+    Direction.prototype.toString = function () {
+        return this.name;
+    };
+    Direction.ASCENDING = new Direction('asc');
+    Direction.DESCENDING = new Direction('desc');
+    return Direction;
+}());
+/**
+ * Represents a bound of a query.
+ *
+ * The bound is specified with the given components representing a position and
+ * whether it's just before or just after the position (relative to whatever the
+ * query order is).
+ *
+ * The position represents a logical index position for a query. It's a prefix
+ * of values for the (potentially implicit) order by clauses of a query.
+ *
+ * Bound provides a function to determine whether a document comes before or
+ * after a bound. This is influenced by whether the position is just before or
+ * just after the provided values.
+ */
+var Bound = /** @class */ (function () {
+    function Bound(position, before) {
+        this.position = position;
+        this.before = before;
+    }
+    Bound.prototype.canonicalId = function () {
+        // TODO(b/29183165): Make this collision robust.
+        var canonicalId = this.before ? 'b:' : 'a:';
+        for (var _i = 0, _a = this.position; _i < _a.length; _i++) {
+            var component = _a[_i];
+            canonicalId += component.toString();
+        }
+        return canonicalId;
+    };
+    /**
+     * Returns true if a document sorts before a bound using the provided sort
+     * order.
+     */
+    Bound.prototype.sortsBeforeDocument = function (orderBy, doc) {
+        assert(this.position.length <= orderBy.length, "Bound has more components than query's orderBy");
+        var comparison = 0;
+        for (var i = 0; i < this.position.length; i++) {
+            var orderByComponent = orderBy[i];
+            var component = this.position[i];
+            if (orderByComponent.field.isKeyField()) {
+                assert(component instanceof RefValue, 'Bound has a non-key value where the key path is being used.');
+                comparison = DocumentKey.comparator(component.key, doc.key);
+            }
+            else {
+                var docValue = doc.field(orderByComponent.field);
+                assert(docValue !== null, 'Field should exist since document matched the orderBy already.');
+                comparison = component.compareTo(docValue);
+            }
+            if (orderByComponent.dir === Direction.DESCENDING) {
+                comparison = comparison * -1;
+            }
+            if (comparison !== 0) {
+                break;
+            }
+        }
+        return this.before ? comparison <= 0 : comparison < 0;
+    };
+    Bound.prototype.isEqual = function (other) {
+        if (other === null) {
+            return false;
+        }
+        if (this.before !== other.before ||
+            this.position.length !== other.position.length) {
+            return false;
+        }
+        for (var i = 0; i < this.position.length; i++) {
+            var thisPosition = this.position[i];
+            var otherPosition = other.position[i];
+            if (!thisPosition.isEqual(otherPosition)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    return Bound;
+}());
+/**
+ * An ordering on a field, in some Direction. Direction defaults to ASCENDING.
+ */
+var OrderBy = /** @class */ (function () {
+    function OrderBy(field, dir) {
+        this.field = field;
+        if (dir === undefined) {
+            dir = Direction.ASCENDING;
+        }
+        this.dir = dir;
+        this.isKeyOrderBy = field.isKeyField();
+    }
+    OrderBy.prototype.compare = function (d1, d2) {
+        var comparison = this.isKeyOrderBy
+            ? Document.compareByKey(d1, d2)
+            : Document.compareByField(this.field, d1, d2);
+        switch (this.dir) {
+            case Direction.ASCENDING:
+                return comparison;
+            case Direction.DESCENDING:
+                return -1 * comparison;
+            default:
+                return fail('Unknown direction: ' + this.dir);
+        }
+    };
+    OrderBy.prototype.canonicalId = function () {
+        // TODO(b/29183165): Make this collision robust.
+        return this.field.canonicalString() + this.dir.toString();
+    };
+    OrderBy.prototype.toString = function () {
+        return this.field.canonicalString() + " (" + this.dir + ")";
+    };
+    OrderBy.prototype.isEqual = function (other) {
+        return this.dir === other.dir && this.field.isEqual(other.field);
+    };
+    return OrderBy;
+}());
+var KEY_ORDERING_ASC = new OrderBy(FieldPath.keyField(), Direction.ASCENDING);
+var KEY_ORDERING_DESC = new OrderBy(FieldPath.keyField(), Direction.DESCENDING);
+
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// TOOD(b/140938512): Drop SimpleQueryEngine and rename IndexFreeQueryEngine.
+/**
+ * A query engine that takes advantage of the target document mapping in the
+ * QueryCache. The IndexFreeQueryEngine optimizes query execution by only
+ * reading the documents that previously matched a query plus any documents that were
+ * edited after the query was last listened to.
+ *
+ * There are some cases where Index-Free queries are not guaranteed to produce
+ * the same results as full collection scans. In these cases, the
+ * IndexFreeQueryEngine falls back to full query processing. These cases are:
+ *
+ * - Limit queries where a document that matched the query previously no longer
+ *   matches the query.
+ *
+ * - Limit queries where a document edit may cause the document to sort below
+ *   another document that is in the local cache.
+ *
+ * - Queries that have never been CURRENT or free of Limbo documents.
+ */
+var IndexFreeQueryEngine = /** @class */ (function () {
+    function IndexFreeQueryEngine() {
+    }
+    IndexFreeQueryEngine.prototype.setLocalDocumentsView = function (localDocuments) {
+        this.localDocumentsView = localDocuments;
+    };
+    IndexFreeQueryEngine.prototype.getDocumentsMatchingQuery = function (transaction, query, lastLimboFreeSnapshotVersion, remoteKeys) {
+        var _this = this;
+        assert(this.localDocumentsView !== undefined, 'setLocalDocumentsView() not called');
+        // Queries that match all documents don't benefit from using
+        // IndexFreeQueries. It is more efficient to scan all documents in a
+        // collection, rather than to perform individual lookups.
+        if (query.matchesAllDocuments()) {
+            return this.executeFullCollectionScan(transaction, query);
+        }
+        // Queries that have never seen a snapshot without limbo free documents
+        // should also be run as a full collection scan.
+        if (lastLimboFreeSnapshotVersion.isEqual(SnapshotVersion.MIN)) {
+            return this.executeFullCollectionScan(transaction, query);
+        }
+        return this.localDocumentsView.getDocuments(transaction, remoteKeys).next(function (documents) {
+            var previousResults = _this.applyQuery(query, documents);
+            if ((query.hasLimitToFirst() || query.hasLimitToLast()) &&
+                _this.needsRefill(query.limitType, previousResults, remoteKeys, lastLimboFreeSnapshotVersion)) {
+                return _this.executeFullCollectionScan(transaction, query);
+            }
+            if (getLogLevel() <= LogLevel$1.DEBUG) {
+                debug('IndexFreeQueryEngine', 'Re-using previous result from %s to execute query: %s', lastLimboFreeSnapshotVersion.toString(), query.toString());
+            }
+            // Retrieve all results for documents that were updated since the last
+            // limbo-document free remote snapshot.
+            return _this.localDocumentsView.getDocumentsMatchingQuery(transaction, query, lastLimboFreeSnapshotVersion).next(function (updatedResults) {
+                // We merge `previousResults` into `updateResults`, since
+                // `updateResults` is already a DocumentMap. If a document is
+                // contained in both lists, then its contents are the same.
+                previousResults.forEach(function (doc) {
+                    updatedResults = updatedResults.insert(doc.key, doc);
+                });
+                return updatedResults;
+            });
+        });
+    };
+    /** Applies the query filter and sorting to the provided documents.  */
+    IndexFreeQueryEngine.prototype.applyQuery = function (query, documents) {
+        // Sort the documents and re-apply the query filter since previously
+        // matching documents do not necessarily still match the query.
+        var queryResults = new SortedSet(function (d1, d2) {
+            return query.docComparator(d1, d2);
+        });
+        documents.forEach(function (_, maybeDoc) {
+            if (maybeDoc instanceof Document && query.matches(maybeDoc)) {
+                queryResults = queryResults.add(maybeDoc);
+            }
+        });
+        return queryResults;
+    };
+    /**
+     * Determines if a limit query needs to be refilled from cache, making it
+     * ineligible for index-free execution.
+     *
+     * @param sortedPreviousResults The documents that matched the query when it
+     * was last synchronized, sorted by the query's comparator.
+     * @param remoteKeys The document keys that matched the query at the last
+     * snapshot.
+     * @param limboFreeSnapshotVersion The version of the snapshot when the query
+     * was last synchronized.
+     */
+    IndexFreeQueryEngine.prototype.needsRefill = function (limitType, sortedPreviousResults, remoteKeys, limboFreeSnapshotVersion) {
+        // The query needs to be refilled if a previously matching document no
+        // longer matches.
+        if (remoteKeys.size !== sortedPreviousResults.size) {
+            return true;
+        }
+        // Limit queries are not eligible for index-free query execution if there is
+        // a potential that an older document from cache now sorts before a document
+        // that was previously part of the limit. This, however, can only happen if
+        // the document at the edge of the limit goes out of limit.
+        // If a document that is not the limit boundary sorts differently,
+        // the boundary of the limit itself did not change and documents from cache
+        // will continue to be "rejected" by this boundary. Therefore, we can ignore
+        // any modifications that don't affect the last document.
+        var docAtLimitEdge = limitType === LimitType.First
+            ? sortedPreviousResults.last()
+            : sortedPreviousResults.first();
+        if (!docAtLimitEdge) {
+            // We don't need to refill the query if there were already no documents.
+            return false;
+        }
+        return (docAtLimitEdge.hasPendingWrites ||
+            docAtLimitEdge.version.compareTo(limboFreeSnapshotVersion) > 0);
+    };
+    IndexFreeQueryEngine.prototype.executeFullCollectionScan = function (transaction, query) {
+        if (getLogLevel() <= LogLevel$1.DEBUG) {
+            debug('IndexFreeQueryEngine', 'Using full collection scan to execute query: %s', query.toString());
+        }
+        return this.localDocumentsView.getDocumentsMatchingQuery(transaction, query, SnapshotVersion.MIN);
+    };
+    return IndexFreeQueryEngine;
+}());
 
 /**
  * @license
@@ -11284,15 +12631,16 @@ var LocalStore = /** @class */ (function () {
          */
         this.localViewReferences = new ReferenceSet();
         /**
-         * Maps a targetID to data about its query.
+         * Maps a targetID to data about its target.
          *
          * PORTING NOTE: We are using an immutable data structure on Web to make re-runs
          * of `applyRemoteEvent()` idempotent.
          */
-        this.queryDataByTarget = new SortedMap(primitiveComparator);
-        /** Maps a query to its targetID. */
-        this.targetIdByQuery = new ObjectMap(function (q) {
-            return q.canonicalId();
+        this.targetDataByTarget = new SortedMap(primitiveComparator);
+        /** Maps a target to its targetID. */
+        // TODO(wuandy): Evaluate if TargetId can be part of Target.
+        this.targetIdByTarget = new ObjectMap(function (t) {
+            return t.canonicalId();
         });
         /**
          * The read time of the last entry processed by `getNewDocumentChanges()`.
@@ -11304,7 +12652,7 @@ var LocalStore = /** @class */ (function () {
         this.persistence.referenceDelegate.setInMemoryPins(this.localViewReferences);
         this.mutationQueue = persistence.getMutationQueue(initialUser);
         this.remoteDocuments = persistence.getRemoteDocumentCache();
-        this.queryCache = persistence.getQueryCache();
+        this.targetCache = persistence.getTargetCache();
         this.localDocuments = new LocalDocumentsView(this.remoteDocuments, this.mutationQueue, this.persistence.getIndexManager());
         this.queryEngine.setLocalDocumentsView(this.localDocuments);
     }
@@ -11531,7 +12879,7 @@ var LocalStore = /** @class */ (function () {
      */
     LocalStore.prototype.getLastRemoteSnapshotVersion = function () {
         var _this = this;
-        return this.persistence.runTransaction('Get last remote snapshot version', 'readonly-idempotent', function (txn) { return _this.queryCache.getLastRemoteSnapshotVersion(txn); });
+        return this.persistence.runTransaction('Get last remote snapshot version', 'readonly-idempotent', function (txn) { return _this.targetCache.getLastRemoteSnapshotVersion(txn); });
     };
     /**
      * Update the "ground-state" (remote) documents. We assume that the remote
@@ -11544,39 +12892,39 @@ var LocalStore = /** @class */ (function () {
     LocalStore.prototype.applyRemoteEvent = function (remoteEvent) {
         var _this = this;
         var remoteVersion = remoteEvent.snapshotVersion;
-        var newQueryDataByTargetMap = this.queryDataByTarget;
+        var newTargetDataByTargetMap = this.targetDataByTarget;
         return this.persistence
             .runTransaction('Apply remote event', 'readwrite-primary-idempotent', function (txn) {
             var documentBuffer = _this.remoteDocuments.newChangeBuffer({
                 trackRemovals: true // Make sure document removals show up in `getNewDocumentChanges()`
             });
-            // Reset newQueryDataByTargetMap in case this transaction gets re-run.
-            newQueryDataByTargetMap = _this.queryDataByTarget;
+            // Reset newTargetDataByTargetMap in case this transaction gets re-run.
+            newTargetDataByTargetMap = _this.targetDataByTarget;
             var promises = [];
             forEachNumber(remoteEvent.targetChanges, function (targetId, change) {
-                var oldQueryData = newQueryDataByTargetMap.get(targetId);
-                if (!oldQueryData) {
+                var oldTargetData = newTargetDataByTargetMap.get(targetId);
+                if (!oldTargetData) {
                     return;
                 }
-                // Only update the remote keys if the query is still active. This
-                // ensures that we can persist the updated query data along with
+                // Only update the remote keys if the target is still active. This
+                // ensures that we can persist the updated target data along with
                 // the updated assignment.
-                promises.push(_this.queryCache
+                promises.push(_this.targetCache
                     .removeMatchingKeys(txn, change.removedDocuments, targetId)
                     .next(function () {
-                    return _this.queryCache.addMatchingKeys(txn, change.addedDocuments, targetId);
+                    return _this.targetCache.addMatchingKeys(txn, change.addedDocuments, targetId);
                 }));
                 var resumeToken = change.resumeToken;
                 // Update the resume token if the change includes one.
                 if (resumeToken.length > 0) {
-                    var newQueryData = oldQueryData
+                    var newTargetData = oldTargetData
                         .withResumeToken(resumeToken, remoteVersion)
                         .withSequenceNumber(txn.currentSequenceNumber);
-                    newQueryDataByTargetMap = newQueryDataByTargetMap.insert(targetId, newQueryData);
-                    // Update the query data if there are target changes (or if
+                    newTargetDataByTargetMap = newTargetDataByTargetMap.insert(targetId, newTargetData);
+                    // Update the target data if there are target changes (or if
                     // sufficient time has passed since the last update).
-                    if (LocalStore.shouldPersistQueryData(oldQueryData, newQueryData, change)) {
-                        promises.push(_this.queryCache.updateQueryData(txn, newQueryData));
+                    if (LocalStore.shouldPersistTargetData(oldTargetData, newTargetData, change)) {
+                        promises.push(_this.targetCache.updateTargetData(txn, newTargetData));
                     }
                 }
             });
@@ -11606,11 +12954,7 @@ var LocalStore = /** @class */ (function () {
                         doc.version.compareTo(existingDoc.version) > 0 ||
                         (doc.version.compareTo(existingDoc.version) === 0 &&
                             existingDoc.hasPendingWrites)) {
-                        // TODO(index-free): Make this an assert when we enable
-                        // Index-Free queries
-                        if (SnapshotVersion.MIN.isEqual(remoteVersion)) {
-                            error(LOG_TAG$2, 'Cannot add a document when the remote version is zero');
-                        }
+                        assert(!SnapshotVersion.MIN.isEqual(remoteVersion), 'Cannot add a document when the remote version is zero');
                         documentBuffer.addEntry(doc, remoteVersion);
                         changedDocs = changedDocs.insert(key, doc);
                     }
@@ -11627,14 +12971,14 @@ var LocalStore = /** @class */ (function () {
             // trying to resolve the state of a locally cached document that is in
             // limbo.
             if (!remoteVersion.isEqual(SnapshotVersion.MIN)) {
-                var updateRemoteVersion = _this.queryCache
+                var updateRemoteVersion = _this.targetCache
                     .getLastRemoteSnapshotVersion(txn)
                     .next(function (lastRemoteSnapshotVersion) {
                     assert(remoteVersion.compareTo(lastRemoteSnapshotVersion) >= 0, 'Watch stream reverted to previous snapshot?? ' +
                         remoteVersion +
                         ' < ' +
                         lastRemoteSnapshotVersion);
-                    return _this.queryCache.setTargetsMetadata(txn, txn.currentSequenceNumber, remoteVersion);
+                    return _this.targetCache.setTargetsMetadata(txn, txn.currentSequenceNumber, remoteVersion);
                 });
                 promises.push(updateRemoteVersion);
             }
@@ -11645,25 +12989,25 @@ var LocalStore = /** @class */ (function () {
             });
         })
             .then(function (changedDocs) {
-            _this.queryDataByTarget = newQueryDataByTargetMap;
+            _this.targetDataByTarget = newTargetDataByTargetMap;
             return changedDocs;
         });
     };
     /**
-     * Returns true if the newQueryData should be persisted during an update of
-     * an active target. QueryData should always be persisted when a target is
+     * Returns true if the newTargetData should be persisted during an update of
+     * an active target. TargetData should always be persisted when a target is
      * being released and should not call this function.
      *
-     * While the target is active, QueryData updates can be omitted when nothing
+     * While the target is active, TargetData updates can be omitted when nothing
      * about the target has changed except metadata like the resume token or
      * snapshot version. Occasionally it's worth the extra write to prevent these
      * values from getting too stale after a crash, but this doesn't have to be
      * too frequent.
      */
-    LocalStore.shouldPersistQueryData = function (oldQueryData, newQueryData, change) {
-        assert(newQueryData.resumeToken.length > 0, 'Attempted to persist query data with no resume token');
-        // Always persist query data if we don't already have a resume token.
-        if (oldQueryData.resumeToken.length === 0) {
+    LocalStore.shouldPersistTargetData = function (oldTargetData, newTargetData, change) {
+        assert(newTargetData.resumeToken.length > 0, 'Attempted to persist target data with no resume token');
+        // Always persist target data if we don't already have a resume token.
+        if (oldTargetData.resumeToken.length === 0) {
             return true;
         }
         // Don't allow resume token changes to be buffered indefinitely. This
@@ -11671,8 +13015,8 @@ var LocalStore = /** @class */ (function () {
         // to loop over all active queries on shutdown. Especially in the browser
         // we may not get time to do anything interesting while the current tab is
         // closing.
-        var timeDelta = newQueryData.snapshotVersion.toMicroseconds() -
-            oldQueryData.snapshotVersion.toMicroseconds();
+        var timeDelta = newTargetData.snapshotVersion.toMicroseconds() -
+            oldTargetData.snapshotVersion.toMicroseconds();
         if (timeDelta >= this.RESUME_TOKEN_MAX_AGE_MICROS) {
             return true;
         }
@@ -11697,12 +13041,12 @@ var LocalStore = /** @class */ (function () {
             this.localViewReferences.addReferences(viewChange.addedKeys, targetId);
             this.localViewReferences.removeReferences(viewChange.removedKeys, targetId);
             if (!viewChange.fromCache) {
-                var queryData = this.queryDataByTarget.get(targetId);
-                assert(queryData !== null, "Can't set limbo-free snapshot version for unknown target: " + targetId);
+                var targetData = this.targetDataByTarget.get(targetId);
+                assert(targetData !== null, "Can't set limbo-free snapshot version for unknown target: " + targetId);
                 // Advance the last limbo free snapshot version
-                var lastLimboFreeSnapshotVersion = queryData.snapshotVersion;
-                var updatedQueryData = queryData.withLastLimboFreeSnapshotVersion(lastLimboFreeSnapshotVersion);
-                this.queryDataByTarget = this.queryDataByTarget.insert(targetId, updatedQueryData);
+                var lastLimboFreeSnapshotVersion = targetData.snapshotVersion;
+                var updatedTargetData = targetData.withLastLimboFreeSnapshotVersion(lastLimboFreeSnapshotVersion);
+                this.targetDataByTarget = this.targetDataByTarget.insert(targetId, updatedTargetData);
             }
         }
         return this.persistence.runTransaction('notifyLocalViewChanges', 'readwrite-idempotent', function (txn) {
@@ -11739,76 +13083,79 @@ var LocalStore = /** @class */ (function () {
         });
     };
     /**
-     * Assigns the given query an internal ID so that its results can be pinned so
-     * they don't get GC'd. A query must be allocated in the local store before
+     * Assigns the given target an internal ID so that its results can be pinned so
+     * they don't get GC'd. A target must be allocated in the local store before
      * the store can be used to manage its view.
+     *
+     * Allocating an already allocated `Target` will return the existing `TargetData`
+     * for that `Target`.
      */
-    LocalStore.prototype.allocateQuery = function (query) {
+    LocalStore.prototype.allocateTarget = function (target) {
         var _this = this;
         return this.persistence
-            .runTransaction('Allocate query', 'readwrite-idempotent', function (txn) {
-            var queryData;
-            return _this.queryCache
-                .getQueryData(txn, query)
+            .runTransaction('Allocate target', 'readwrite-idempotent', function (txn) {
+            var targetData;
+            return _this.targetCache
+                .getTargetData(txn, target)
                 .next(function (cached) {
                 if (cached) {
-                    // This query has been listened to previously, so reuse the
+                    // This target has been listened to previously, so reuse the
                     // previous targetID.
                     // TODO(mcg): freshen last accessed date?
-                    queryData = cached;
-                    return PersistencePromise.resolve(queryData);
+                    targetData = cached;
+                    return PersistencePromise.resolve(targetData);
                 }
                 else {
-                    return _this.queryCache.allocateTargetId(txn).next(function (targetId) {
-                        queryData = new QueryData(query, targetId, QueryPurpose.Listen, txn.currentSequenceNumber);
-                        return _this.queryCache
-                            .addQueryData(txn, queryData)
-                            .next(function () { return queryData; });
+                    return _this.targetCache.allocateTargetId(txn).next(function (targetId) {
+                        targetData = new TargetData(target, targetId, TargetPurpose.Listen, txn.currentSequenceNumber);
+                        return _this.targetCache
+                            .addTargetData(txn, targetData)
+                            .next(function () { return targetData; });
                     });
                 }
             });
         })
-            .then(function (queryData) {
-            assert(_this.queryDataByTarget.get(queryData.targetId) === null, 'Tried to allocate an already allocated query: ' + query);
-            _this.queryDataByTarget = _this.queryDataByTarget.insert(queryData.targetId, queryData);
-            _this.targetIdByQuery.set(query, queryData.targetId);
-            return queryData;
+            .then(function (targetData) {
+            if (_this.targetDataByTarget.get(targetData.targetId) === null) {
+                _this.targetDataByTarget = _this.targetDataByTarget.insert(targetData.targetId, targetData);
+                _this.targetIdByTarget.set(target, targetData.targetId);
+            }
+            return targetData;
         });
     };
     /**
-     * Returns the QueryData as seen by the LocalStore, including updates that may
-     * have not yet been persisted to the QueryCache.
+     * Returns the TargetData as seen by the LocalStore, including updates that may
+     * have not yet been persisted to the TargetCache.
      */
     // Visible for testing.
-    LocalStore.prototype.getQueryData = function (transaction, query) {
-        var targetId = this.targetIdByQuery.get(query);
+    LocalStore.prototype.getTargetData = function (transaction, target) {
+        var targetId = this.targetIdByTarget.get(target);
         if (targetId !== undefined) {
-            return PersistencePromise.resolve(this.queryDataByTarget.get(targetId));
+            return PersistencePromise.resolve(this.targetDataByTarget.get(targetId));
         }
         else {
-            return this.queryCache.getQueryData(transaction, query);
+            return this.targetCache.getTargetData(transaction, target);
         }
     };
     /**
-     * Unpin all the documents associated with the given query. If
-     * `keepPersistedQueryData` is set to false and Eager GC enabled, the method
-     * directly removes the associated query data from the query cache.
+     * Unpin all the documents associated with the given target. If
+     * `keepPersistedTargetData` is set to false and Eager GC enabled, the method
+     * directly removes the associated target data from the target cache.
+     *
+     * Releasing a non-existing `Target` is a no-op.
      */
-    // PORTING NOTE: `keepPersistedQueryData` is multi-tab only.
-    LocalStore.prototype.releaseQuery = function (query, keepPersistedQueryData) {
+    // PORTING NOTE: `keepPersistedTargetData` is multi-tab only.
+    LocalStore.prototype.releaseTarget = function (targetId, keepPersistedTargetData) {
         var _this = this;
-        var targetId;
-        var mode = keepPersistedQueryData
+        var targetData = this.targetDataByTarget.get(targetId);
+        assert(targetData !== null, "Tried to release nonexistent target: " + targetId);
+        var mode = keepPersistedTargetData
             ? 'readwrite-idempotent'
             : 'readwrite-primary-idempotent';
         return this.persistence
-            .runTransaction('Release query', mode, function (txn) {
-            var cachedTargetId = _this.targetIdByQuery.get(query);
-            assert(cachedTargetId !== undefined, 'Tried to release nonexistent query: ' + query);
-            targetId = cachedTargetId;
-            var queryData = _this.queryDataByTarget.get(targetId);
+            .runTransaction('Release target', mode, function (txn) {
             // References for documents sent via Watch are automatically removed
-            // when we delete a query's target data from the reference delegate.
+            // when we delete a target's data from the reference delegate.
             // Since this does not remove references for locally mutated documents,
             // we have to remove the target associations for these documents
             // manually.
@@ -11818,11 +13165,11 @@ var LocalStore = /** @class */ (function () {
             // transaction fails since there are no side effects if the target has
             // already been removed.
             var removed = _this.localViewReferences.removeReferencesForId(targetId);
-            if (!keepPersistedQueryData) {
+            if (!keepPersistedTargetData) {
                 return PersistencePromise.forEach(removed, function (key) {
                     return _this.persistence.referenceDelegate.removeReference(txn, key);
                 }).next(function () {
-                    _this.persistence.referenceDelegate.removeTarget(txn, queryData);
+                    _this.persistence.referenceDelegate.removeTarget(txn, targetData);
                 });
             }
             else {
@@ -11830,8 +13177,8 @@ var LocalStore = /** @class */ (function () {
             }
         })
             .then(function () {
-            _this.queryDataByTarget = _this.queryDataByTarget.remove(targetId);
-            _this.targetIdByQuery.delete(query);
+            _this.targetDataByTarget = _this.targetDataByTarget.remove(targetId);
+            _this.targetIdByTarget.delete(targetData.target);
         });
     };
     /**
@@ -11847,13 +13194,13 @@ var LocalStore = /** @class */ (function () {
         var lastLimboFreeSnapshotVersion = SnapshotVersion.MIN;
         var remoteKeys = documentKeySet();
         return this.persistence.runTransaction('Execute query', 'readonly-idempotent', function (txn) {
-            return _this.getQueryData(txn, query)
-                .next(function (queryData) {
-                if (queryData) {
+            return _this.getTargetData(txn, query.toTarget())
+                .next(function (targetData) {
+                if (targetData) {
                     lastLimboFreeSnapshotVersion =
-                        queryData.lastLimboFreeSnapshotVersion;
-                    return _this.queryCache
-                        .getMatchingKeysForTargetId(txn, queryData.targetId)
+                        targetData.lastLimboFreeSnapshotVersion;
+                    return _this.targetCache
+                        .getMatchingKeysForTargetId(txn, targetData.targetId)
                         .next(function (result) {
                         remoteKeys = result;
                     });
@@ -11876,7 +13223,7 @@ var LocalStore = /** @class */ (function () {
     LocalStore.prototype.remoteDocumentKeys = function (targetId) {
         var _this = this;
         return this.persistence.runTransaction('Remote document keys', 'readonly-idempotent', function (txn) {
-            return _this.queryCache.getMatchingKeysForTargetId(txn, targetId);
+            return _this.targetCache.getMatchingKeysForTargetId(txn, targetId);
         });
     };
     // PORTING NOTE: Multi-tab only.
@@ -11929,20 +13276,20 @@ var LocalStore = /** @class */ (function () {
     };
     LocalStore.prototype.collectGarbage = function (garbageCollector) {
         var _this = this;
-        return this.persistence.runTransaction('Collect garbage', 'readwrite-primary-idempotent', function (txn) { return garbageCollector.collect(txn, _this.queryDataByTarget); });
+        return this.persistence.runTransaction('Collect garbage', 'readwrite-primary-idempotent', function (txn) { return garbageCollector.collect(txn, _this.targetDataByTarget); });
     };
     // PORTING NOTE: Multi-tab only.
-    LocalStore.prototype.getQueryForTarget = function (targetId) {
+    LocalStore.prototype.getTarget = function (targetId) {
         var _this = this;
-        var cachedQueryData = this.queryDataByTarget.get(targetId);
-        if (cachedQueryData) {
-            return Promise.resolve(cachedQueryData.query);
+        var cachedTargetData = this.targetDataByTarget.get(targetId);
+        if (cachedTargetData) {
+            return Promise.resolve(cachedTargetData.target);
         }
         else {
-            return this.persistence.runTransaction('Get query data', 'readonly-idempotent', function (txn) {
-                return _this.queryCache
-                    .getQueryDataForTarget(txn, targetId)
-                    .next(function (queryData) { return (queryData ? queryData.query : null); });
+            return this.persistence.runTransaction('Get target data', 'readonly-idempotent', function (txn) {
+                return _this.targetCache
+                    .getTargetDataForTarget(txn, targetId)
+                    .next(function (targetData) { return (targetData ? targetData.target : null); });
             });
         }
     };
@@ -12270,161 +13617,6 @@ var MemoryMutationQueue = /** @class */ (function () {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-var MemoryQueryCache = /** @class */ (function () {
-    function MemoryQueryCache(persistence) {
-        this.persistence = persistence;
-        /**
-         * Maps a query to the data about that query
-         */
-        this.queries = new ObjectMap(function (q) { return q.canonicalId(); });
-        /** The last received snapshot version. */
-        this.lastRemoteSnapshotVersion = SnapshotVersion.MIN;
-        /** The highest numbered target ID encountered. */
-        this.highestTargetId = 0;
-        /** The highest sequence number encountered. */
-        this.highestSequenceNumber = 0;
-        /**
-         * A ordered bidirectional mapping between documents and the remote target
-         * IDs.
-         */
-        this.references = new ReferenceSet();
-        this.targetCount = 0;
-        this.targetIdGenerator = TargetIdGenerator.forQueryCache();
-    }
-    MemoryQueryCache.prototype.getTargetCount = function (txn) {
-        return PersistencePromise.resolve(this.targetCount);
-    };
-    MemoryQueryCache.prototype.forEachTarget = function (txn, f) {
-        this.queries.forEach(function (_, queryData) { return f(queryData); });
-        return PersistencePromise.resolve();
-    };
-    MemoryQueryCache.prototype.getLastRemoteSnapshotVersion = function (transaction) {
-        return PersistencePromise.resolve(this.lastRemoteSnapshotVersion);
-    };
-    MemoryQueryCache.prototype.getHighestSequenceNumber = function (transaction) {
-        return PersistencePromise.resolve(this.highestSequenceNumber);
-    };
-    MemoryQueryCache.prototype.allocateTargetId = function (transaction) {
-        var nextTargetId = this.targetIdGenerator.after(this.highestTargetId);
-        this.highestTargetId = nextTargetId;
-        return PersistencePromise.resolve(nextTargetId);
-    };
-    MemoryQueryCache.prototype.setTargetsMetadata = function (transaction, highestListenSequenceNumber, lastRemoteSnapshotVersion) {
-        if (lastRemoteSnapshotVersion) {
-            this.lastRemoteSnapshotVersion = lastRemoteSnapshotVersion;
-        }
-        if (highestListenSequenceNumber > this.highestSequenceNumber) {
-            this.highestSequenceNumber = highestListenSequenceNumber;
-        }
-        return PersistencePromise.resolve();
-    };
-    MemoryQueryCache.prototype.saveQueryData = function (queryData) {
-        this.queries.set(queryData.query, queryData);
-        var targetId = queryData.targetId;
-        if (targetId > this.highestTargetId) {
-            this.highestTargetId = targetId;
-        }
-        if (queryData.sequenceNumber > this.highestSequenceNumber) {
-            this.highestSequenceNumber = queryData.sequenceNumber;
-        }
-    };
-    MemoryQueryCache.prototype.addQueryData = function (transaction, queryData) {
-        assert(!this.queries.has(queryData.query), 'Adding a query that already exists');
-        this.saveQueryData(queryData);
-        this.targetCount += 1;
-        return PersistencePromise.resolve();
-    };
-    MemoryQueryCache.prototype.updateQueryData = function (transaction, queryData) {
-        assert(this.queries.has(queryData.query), 'Updating a non-existent query');
-        this.saveQueryData(queryData);
-        return PersistencePromise.resolve();
-    };
-    MemoryQueryCache.prototype.removeQueryData = function (transaction, queryData) {
-        assert(this.targetCount > 0, 'Removing a target from an empty cache');
-        assert(this.queries.has(queryData.query), 'Removing a non-existent target from the cache');
-        this.queries.delete(queryData.query);
-        this.references.removeReferencesForId(queryData.targetId);
-        this.targetCount -= 1;
-        return PersistencePromise.resolve();
-    };
-    MemoryQueryCache.prototype.removeTargets = function (transaction, upperBound, activeTargetIds) {
-        var _this = this;
-        var count = 0;
-        var removals = [];
-        this.queries.forEach(function (key, queryData) {
-            if (queryData.sequenceNumber <= upperBound &&
-                activeTargetIds.get(queryData.targetId) === null) {
-                _this.queries.delete(key);
-                removals.push(_this.removeMatchingKeysForTargetId(transaction, queryData.targetId));
-                count++;
-            }
-        });
-        return PersistencePromise.waitFor(removals).next(function () { return count; });
-    };
-    MemoryQueryCache.prototype.getQueryCount = function (transaction) {
-        return PersistencePromise.resolve(this.targetCount);
-    };
-    MemoryQueryCache.prototype.getQueryData = function (transaction, query) {
-        var queryData = this.queries.get(query) || null;
-        return PersistencePromise.resolve(queryData);
-    };
-    MemoryQueryCache.prototype.getQueryDataForTarget = function (transaction, targetId) {
-        // This method is only needed for multi-tab and we can't implement it
-        // efficiently without additional data structures.
-        return fail('Not yet implemented.');
-    };
-    MemoryQueryCache.prototype.addMatchingKeys = function (txn, keys, targetId) {
-        this.references.addReferences(keys, targetId);
-        var referenceDelegate = this.persistence.referenceDelegate;
-        var promises = [];
-        if (referenceDelegate) {
-            keys.forEach(function (key) {
-                promises.push(referenceDelegate.addReference(txn, key));
-            });
-        }
-        return PersistencePromise.waitFor(promises);
-    };
-    MemoryQueryCache.prototype.removeMatchingKeys = function (txn, keys, targetId) {
-        this.references.removeReferences(keys, targetId);
-        var referenceDelegate = this.persistence.referenceDelegate;
-        var promises = [];
-        if (referenceDelegate) {
-            keys.forEach(function (key) {
-                promises.push(referenceDelegate.removeReference(txn, key));
-            });
-        }
-        return PersistencePromise.waitFor(promises);
-    };
-    MemoryQueryCache.prototype.removeMatchingKeysForTargetId = function (txn, targetId) {
-        this.references.removeReferencesForId(targetId);
-        return PersistencePromise.resolve();
-    };
-    MemoryQueryCache.prototype.getMatchingKeysForTargetId = function (txn, targetId) {
-        var matchingKeys = this.references.referencesForId(targetId);
-        return PersistencePromise.resolve(matchingKeys);
-    };
-    MemoryQueryCache.prototype.containsKey = function (txn, key) {
-        return PersistencePromise.resolve(this.references.containsKey(key));
-    };
-    return MemoryQueryCache;
-}());
-
-/**
- * @license
- * Copyright 2017 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 function documentEntryMap() {
     return new SortedMap(DocumentKey.comparator);
 }
@@ -12572,6 +13764,158 @@ var MemoryRemoteDocumentCache = /** @class */ (function () {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var MemoryTargetCache = /** @class */ (function () {
+    function MemoryTargetCache(persistence) {
+        this.persistence = persistence;
+        /**
+         * Maps a target to the data about that target
+         */
+        this.targets = new ObjectMap(function (t) { return t.canonicalId(); });
+        /** The last received snapshot version. */
+        this.lastRemoteSnapshotVersion = SnapshotVersion.MIN;
+        /** The highest numbered target ID encountered. */
+        this.highestTargetId = 0;
+        /** The highest sequence number encountered. */
+        this.highestSequenceNumber = 0;
+        /**
+         * A ordered bidirectional mapping between documents and the remote target
+         * IDs.
+         */
+        this.references = new ReferenceSet();
+        this.targetCount = 0;
+        this.targetIdGenerator = TargetIdGenerator.forTargetCache();
+    }
+    MemoryTargetCache.prototype.forEachTarget = function (txn, f) {
+        this.targets.forEach(function (_, targetData) { return f(targetData); });
+        return PersistencePromise.resolve();
+    };
+    MemoryTargetCache.prototype.getLastRemoteSnapshotVersion = function (transaction) {
+        return PersistencePromise.resolve(this.lastRemoteSnapshotVersion);
+    };
+    MemoryTargetCache.prototype.getHighestSequenceNumber = function (transaction) {
+        return PersistencePromise.resolve(this.highestSequenceNumber);
+    };
+    MemoryTargetCache.prototype.allocateTargetId = function (transaction) {
+        var nextTargetId = this.targetIdGenerator.after(this.highestTargetId);
+        this.highestTargetId = nextTargetId;
+        return PersistencePromise.resolve(nextTargetId);
+    };
+    MemoryTargetCache.prototype.setTargetsMetadata = function (transaction, highestListenSequenceNumber, lastRemoteSnapshotVersion) {
+        if (lastRemoteSnapshotVersion) {
+            this.lastRemoteSnapshotVersion = lastRemoteSnapshotVersion;
+        }
+        if (highestListenSequenceNumber > this.highestSequenceNumber) {
+            this.highestSequenceNumber = highestListenSequenceNumber;
+        }
+        return PersistencePromise.resolve();
+    };
+    MemoryTargetCache.prototype.saveTargetData = function (targetData) {
+        this.targets.set(targetData.target, targetData);
+        var targetId = targetData.targetId;
+        if (targetId > this.highestTargetId) {
+            this.highestTargetId = targetId;
+        }
+        if (targetData.sequenceNumber > this.highestSequenceNumber) {
+            this.highestSequenceNumber = targetData.sequenceNumber;
+        }
+    };
+    MemoryTargetCache.prototype.addTargetData = function (transaction, targetData) {
+        assert(!this.targets.has(targetData.target), 'Adding a target that already exists');
+        this.saveTargetData(targetData);
+        this.targetCount += 1;
+        return PersistencePromise.resolve();
+    };
+    MemoryTargetCache.prototype.updateTargetData = function (transaction, targetData) {
+        assert(this.targets.has(targetData.target), 'Updating a non-existent target');
+        this.saveTargetData(targetData);
+        return PersistencePromise.resolve();
+    };
+    MemoryTargetCache.prototype.removeTargetData = function (transaction, targetData) {
+        assert(this.targetCount > 0, 'Removing a target from an empty cache');
+        assert(this.targets.has(targetData.target), 'Removing a non-existent target from the cache');
+        this.targets.delete(targetData.target);
+        this.references.removeReferencesForId(targetData.targetId);
+        this.targetCount -= 1;
+        return PersistencePromise.resolve();
+    };
+    MemoryTargetCache.prototype.removeTargets = function (transaction, upperBound, activeTargetIds) {
+        var _this = this;
+        var count = 0;
+        var removals = [];
+        this.targets.forEach(function (key, targetData) {
+            if (targetData.sequenceNumber <= upperBound &&
+                activeTargetIds.get(targetData.targetId) === null) {
+                _this.targets.delete(key);
+                removals.push(_this.removeMatchingKeysForTargetId(transaction, targetData.targetId));
+                count++;
+            }
+        });
+        return PersistencePromise.waitFor(removals).next(function () { return count; });
+    };
+    MemoryTargetCache.prototype.getTargetCount = function (transaction) {
+        return PersistencePromise.resolve(this.targetCount);
+    };
+    MemoryTargetCache.prototype.getTargetData = function (transaction, target) {
+        var targetData = this.targets.get(target) || null;
+        return PersistencePromise.resolve(targetData);
+    };
+    MemoryTargetCache.prototype.getTargetDataForTarget = function (transaction, targetId) {
+        // This method is only needed for multi-tab and we can't implement it
+        // efficiently without additional data structures.
+        return fail('Not yet implemented.');
+    };
+    MemoryTargetCache.prototype.addMatchingKeys = function (txn, keys, targetId) {
+        this.references.addReferences(keys, targetId);
+        var referenceDelegate = this.persistence.referenceDelegate;
+        var promises = [];
+        if (referenceDelegate) {
+            keys.forEach(function (key) {
+                promises.push(referenceDelegate.addReference(txn, key));
+            });
+        }
+        return PersistencePromise.waitFor(promises);
+    };
+    MemoryTargetCache.prototype.removeMatchingKeys = function (txn, keys, targetId) {
+        this.references.removeReferences(keys, targetId);
+        var referenceDelegate = this.persistence.referenceDelegate;
+        var promises = [];
+        if (referenceDelegate) {
+            keys.forEach(function (key) {
+                promises.push(referenceDelegate.removeReference(txn, key));
+            });
+        }
+        return PersistencePromise.waitFor(promises);
+    };
+    MemoryTargetCache.prototype.removeMatchingKeysForTargetId = function (txn, targetId) {
+        this.references.removeReferencesForId(targetId);
+        return PersistencePromise.resolve();
+    };
+    MemoryTargetCache.prototype.getMatchingKeysForTargetId = function (txn, targetId) {
+        var matchingKeys = this.references.referencesForId(targetId);
+        return PersistencePromise.resolve(matchingKeys);
+    };
+    MemoryTargetCache.prototype.containsKey = function (txn, key) {
+        return PersistencePromise.resolve(this.references.containsKey(key));
+    };
+    return MemoryTargetCache;
+}());
+
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 var LOG_TAG$3 = 'MemoryPersistence';
 /**
  * A memory-backed instance of Persistence. Data is stored only in RAM and
@@ -12592,7 +13936,7 @@ var MemoryPersistence = /** @class */ (function () {
         this._started = false;
         this._started = true;
         this.referenceDelegate = referenceDelegateFactory(this);
-        this.queryCache = new MemoryQueryCache(this);
+        this.targetCache = new MemoryTargetCache(this);
         var sizer = function (doc) {
             return _this.referenceDelegate.documentSize(doc);
         };
@@ -12651,8 +13995,8 @@ var MemoryPersistence = /** @class */ (function () {
         }
         return queue;
     };
-    MemoryPersistence.prototype.getQueryCache = function () {
-        return this.queryCache;
+    MemoryPersistence.prototype.getTargetCache = function () {
+        return this.targetCache;
     };
     MemoryPersistence.prototype.getRemoteDocumentCache = function () {
         return this.remoteDocumentCache;
@@ -12726,15 +14070,15 @@ var MemoryEagerDelegate = /** @class */ (function () {
         this.orphanedDocuments.add(key);
         return PersistencePromise.resolve();
     };
-    MemoryEagerDelegate.prototype.removeTarget = function (txn, queryData) {
+    MemoryEagerDelegate.prototype.removeTarget = function (txn, targetData) {
         var _this = this;
-        var cache = this.persistence.getQueryCache();
+        var cache = this.persistence.getTargetCache();
         return cache
-            .getMatchingKeysForTargetId(txn, queryData.targetId)
+            .getMatchingKeysForTargetId(txn, targetData.targetId)
             .next(function (keys) {
             keys.forEach(function (key) { return _this.orphanedDocuments.add(key); });
         })
-            .next(function () { return cache.removeQueryData(txn, queryData); });
+            .next(function () { return cache.removeTargetData(txn, targetData); });
     };
     MemoryEagerDelegate.prototype.onTransactionStarted = function () {
         this._orphanedDocuments = new Set();
@@ -12773,7 +14117,7 @@ var MemoryEagerDelegate = /** @class */ (function () {
     MemoryEagerDelegate.prototype.isReferenced = function (txn, key) {
         var _this = this;
         return PersistencePromise.or([
-            function () { return _this.persistence.getQueryCache().containsKey(txn, key); },
+            function () { return _this.persistence.getTargetCache().containsKey(txn, key); },
             function () { return _this.persistence.mutationQueuesContainKey(txn, key); },
             function () { return PersistencePromise.resolve(_this.inMemoryPins.containsKey(key)); }
         ]);
@@ -12795,12 +14139,12 @@ var MemoryLruDelegate = /** @class */ (function () {
         return PersistencePromise.resolve();
     };
     MemoryLruDelegate.prototype.forEachTarget = function (txn, f) {
-        return this.persistence.getQueryCache().forEachTarget(txn, f);
+        return this.persistence.getTargetCache().forEachTarget(txn, f);
     };
     MemoryLruDelegate.prototype.getSequenceNumberCount = function (txn) {
         var docCountPromise = this.orphanedDocumentCount(txn);
         var targetCountPromise = this.persistence
-            .getQueryCache()
+            .getTargetCache()
             .getTargetCount(txn);
         return targetCountPromise.next(function (targetCount) {
             return docCountPromise.next(function (docCount) { return targetCount + docCount; });
@@ -12832,7 +14176,7 @@ var MemoryLruDelegate = /** @class */ (function () {
     };
     MemoryLruDelegate.prototype.removeTargets = function (txn, upperBound, activeTargetIds) {
         return this.persistence
-            .getQueryCache()
+            .getTargetCache()
             .removeTargets(txn, upperBound, activeTargetIds);
     };
     MemoryLruDelegate.prototype.removeOrphanedDocuments = function (txn, upperBound) {
@@ -12854,9 +14198,9 @@ var MemoryLruDelegate = /** @class */ (function () {
         this.orphanedSequenceNumbers.set(key, txn.currentSequenceNumber);
         return PersistencePromise.resolve();
     };
-    MemoryLruDelegate.prototype.removeTarget = function (txn, queryData) {
-        var updated = queryData.withSequenceNumber(txn.currentSequenceNumber);
-        return this.persistence.getQueryCache().updateQueryData(txn, updated);
+    MemoryLruDelegate.prototype.removeTarget = function (txn, targetData) {
+        var updated = targetData.withSequenceNumber(txn.currentSequenceNumber);
+        return this.persistence.getTargetCache().updateTargetData(txn, updated);
     };
     MemoryLruDelegate.prototype.addReference = function (txn, key) {
         this.orphanedSequenceNumbers.set(key, txn.currentSequenceNumber);
@@ -12892,7 +14236,7 @@ var MemoryLruDelegate = /** @class */ (function () {
         return PersistencePromise.or([
             function () { return _this.persistence.mutationQueuesContainKey(txn, key); },
             function () { return PersistencePromise.resolve(_this.inMemoryPins.containsKey(key)); },
-            function () { return _this.persistence.getQueryCache().containsKey(txn, key); },
+            function () { return _this.persistence.getTargetCache().containsKey(txn, key); },
             function () {
                 var orphanedAt = _this.orphanedSequenceNumbers.get(key);
                 return PersistencePromise.resolve(orphanedAt !== undefined && orphanedAt > upperBound);
@@ -12904,99 +14248,6 @@ var MemoryLruDelegate = /** @class */ (function () {
     };
     return MemoryLruDelegate;
 }());
-
-/**
- * @license
- * Copyright 2019 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * A naive implementation of QueryEngine that just loads all the documents in
- * the queried collection and then filters them in memory.
- */
-var SimpleQueryEngine = /** @class */ (function () {
-    function SimpleQueryEngine() {
-    }
-    SimpleQueryEngine.prototype.setLocalDocumentsView = function (localDocuments) {
-        this.localDocumentsView = localDocuments;
-    };
-    /** Returns all local documents matching the specified query. */
-    SimpleQueryEngine.prototype.getDocumentsMatchingQuery = function (transaction, query, lastLimboFreeSnapshotVersion, remoteKeys) {
-        assert(this.localDocumentsView !== undefined, 'setLocalDocumentsView() not called');
-        // TODO: Once LocalDocumentsView provides a getCollectionDocuments()
-        // method, we should call that here and then filter the results.
-        return this.localDocumentsView.getDocumentsMatchingQuery(transaction, query, SnapshotVersion.MIN);
-    };
-    return SimpleQueryEngine;
-}());
-
-/**
- * @license
- * Copyright 2017 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-// Untyped Number alias we can use to check for ES6 methods / properties.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-var NumberAsAny = Number;
-/**
- * Minimum safe integer in Javascript because of floating point precision.
- * Added to not rely on ES6 features.
- */
-var MIN_SAFE_INTEGER = NumberAsAny.MIN_SAFE_INTEGER || -(Math.pow(2, 53) - 1);
-/**
- * Maximum safe integer in Javascript because of floating point precision.
- * Added to not rely on ES6 features.
- */
-var MAX_SAFE_INTEGER = NumberAsAny.MAX_SAFE_INTEGER || Math.pow(2, 53) - 1;
-/**
- * Returns whether an number is an integer, uses native implementation if
- * available.
- * Added to not rely on ES6 features.
- * @param value The value to test for being an integer
- */
-var isInteger = NumberAsAny.isInteger ||
-    (function (value) {
-        return typeof value === 'number' &&
-            isFinite(value) &&
-            Math.floor(value) === value;
-    });
-/**
- * Returns whether a variable is either undefined or null.
- */
-function isNullOrUndefined(value) {
-    return value === null || value === undefined;
-}
-/**
- * Returns whether a value is an integer and in the safe integer range
- * @param value The value to test for being an integer and in the safe range
- */
-function isSafeInteger(value) {
-    return (isInteger(value) &&
-        value <= MAX_SAFE_INTEGER &&
-        value >= MIN_SAFE_INTEGER);
-}
 
 /**
  * @license
@@ -13554,23 +14805,23 @@ var PersistentListenStream = /** @class */ (function (_super) {
         return this.listener.onWatchChange(watchChange, snapshot);
     };
     /**
-     * Registers interest in the results of the given query. If the query
+     * Registers interest in the results of the given target. If the target
      * includes a resumeToken it will be included in the request. Results that
-     * affect the query will be streamed back as WatchChange messages that
+     * affect the target will be streamed back as WatchChange messages that
      * reference the targetId.
      */
-    PersistentListenStream.prototype.watch = function (queryData) {
+    PersistentListenStream.prototype.watch = function (targetData) {
         var request = {};
         request.database = this.serializer.encodedDatabaseId;
-        request.addTarget = this.serializer.toTarget(queryData);
-        var labels = this.serializer.toListenRequestLabels(queryData);
+        request.addTarget = this.serializer.toTarget(targetData);
+        var labels = this.serializer.toListenRequestLabels(targetData);
         if (labels) {
             request.labels = labels;
         }
         this.sendRequest(request);
     };
     /**
-     * Unregisters interest in the results of the query associated with the
+     * Unregisters interest in the results of the target associated with the
      * given targetId.
      */
     PersistentListenStream.prototype.unwatch = function (targetId) {
@@ -14825,12 +16076,10 @@ var TargetChange = /** @class */ (function () {
         this.removedDocuments = removedDocuments;
     }
     /**
-     * HACK: Views require TargetChanges in order to determine whether the view is
-     * CURRENT, but secondary tabs don't receive remote events. So this method is
-     * used to create a synthesized TargetChanges that can be used to apply a
-     * CURRENT status change to a View, for queries executed in a different tab.
+     * This method is used to create a synthesized TargetChanges that can be used to
+     * apply a CURRENT status change to a View (for queries executed in a different
+     * tab) or for new queries (to raise snapshots with correct CURRENT status).
      */
-    // PORTING NOTE: Multi-tab only
     TargetChange.createSynthesizedTargetChangeForCurrentChange = function (targetId, current) {
         return new TargetChange(emptyByteString(), current, documentKeySet(), documentKeySet(), documentKeySet());
     };
@@ -14901,9 +16150,9 @@ var WatchTargetChange = /** @class */ (function () {
     /** The target IDs that were added/removed/set. */
     targetIds, 
     /**
-     * An opaque, server-assigned token that allows watching a query to be
+     * An opaque, server-assigned token that allows watching a target to be
      * resumed after disconnecting without retransmitting all the data that
-     * matches the query. The resume token essentially identifies a point in
+     * matches the target. The resume token essentially identifies a point in
      * time from which the server should resume sending results.
      */
     resumeToken, 
@@ -15159,10 +16408,10 @@ var WatchChangeAggregator = /** @class */ (function () {
     WatchChangeAggregator.prototype.handleExistenceFilter = function (watchChange) {
         var targetId = watchChange.targetId;
         var expectedCount = watchChange.existenceFilter.count;
-        var queryData = this.queryDataForActiveTarget(targetId);
-        if (queryData) {
-            var query = queryData.query;
-            if (query.isDocumentQuery()) {
+        var targetData = this.targetDataForActiveTarget(targetId);
+        if (targetData) {
+            var target = targetData.target;
+            if (target.isDocumentQuery()) {
                 if (expectedCount === 0) {
                     // The existence filter told us the document does not exist. We deduce
                     // that this document does not exist and apply a deleted document to
@@ -15170,7 +16419,7 @@ var WatchChangeAggregator = /** @class */ (function () {
                     // another query that will raise this document as part of a snapshot
                     // until it is resolved, essentially exposing inconsistency between
                     // queries.
-                    var key = new DocumentKey(query.path);
+                    var key = new DocumentKey(target.path);
                     this.removeDocumentFromTarget(targetId, key, new NoDocument(key, SnapshotVersion.forDeletedDoc()));
                 }
                 else {
@@ -15196,19 +16445,19 @@ var WatchChangeAggregator = /** @class */ (function () {
         var _this = this;
         var targetChanges = {};
         forEachNumber(this.targetStates, function (targetId, targetState) {
-            var queryData = _this.queryDataForActiveTarget(targetId);
-            if (queryData) {
-                if (targetState.current && queryData.query.isDocumentQuery()) {
+            var targetData = _this.targetDataForActiveTarget(targetId);
+            if (targetData) {
+                if (targetState.current && targetData.target.isDocumentQuery()) {
                     // Document queries for document that don't exist can produce an empty
                     // result set. To update our local cache, we synthesize a document
                     // delete if we have not previously received the document. This
                     // resolves the limbo state of the document, removing it from
                     // limboDocumentRefs.
                     //
-                    // TODO(dimond): Ideally we would have an explicit lookup query
+                    // TODO(dimond): Ideally we would have an explicit lookup target
                     // instead resulting in an explicit delete message and we could
                     // remove this special logic.
-                    var key = new DocumentKey(queryData.query.path);
+                    var key = new DocumentKey(targetData.target.path);
                     if (_this.pendingDocumentUpdates.get(key) === null &&
                         !_this.targetContainsDocument(targetId, key)) {
                         _this.removeDocumentFromTarget(targetId, key, new NoDocument(key, snapshotVersion));
@@ -15222,15 +16471,16 @@ var WatchChangeAggregator = /** @class */ (function () {
         });
         var resolvedLimboDocuments = documentKeySet();
         // We extract the set of limbo-only document updates as the GC logic
-        // special-cases documents that do not appear in the query cache.
+        // special-cases documents that do not appear in the target cache.
         //
         // TODO(gsoltis): Expand on this comment once GC is available in the JS
         // client.
         this.pendingDocumentTargetMapping.forEach(function (key, targets) {
             var isOnlyLimboTarget = true;
             targets.forEachWhile(function (targetId) {
-                var queryData = _this.queryDataForActiveTarget(targetId);
-                if (queryData && queryData.purpose !== QueryPurpose.LimboResolution) {
+                var targetData = _this.targetDataForActiveTarget(targetId);
+                if (targetData &&
+                    targetData.purpose !== TargetPurpose.LimboResolution) {
                     isOnlyLimboTarget = false;
                     return false;
                 }
@@ -15329,25 +16579,25 @@ var WatchChangeAggregator = /** @class */ (function () {
     };
     /**
      * Verifies that the user is still interested in this target (by calling
-     * `getQueryDataForTarget()`) and that we are not waiting for pending ADDs
+     * `getTargetDataForTarget()`) and that we are not waiting for pending ADDs
      * from watch.
      */
     WatchChangeAggregator.prototype.isActiveTarget = function (targetId) {
-        var targetActive = this.queryDataForActiveTarget(targetId) !== null;
+        var targetActive = this.targetDataForActiveTarget(targetId) !== null;
         if (!targetActive) {
             debug(LOG_TAG$7, 'Detected inactive target', targetId);
         }
         return targetActive;
     };
     /**
-     * Returns the QueryData for an active target (i.e. a target that the user
+     * Returns the TargetData for an active target (i.e. a target that the user
      * is still interested in that has no outstanding target change requests).
      */
-    WatchChangeAggregator.prototype.queryDataForActiveTarget = function (targetId) {
+    WatchChangeAggregator.prototype.targetDataForActiveTarget = function (targetId) {
         var targetState = this.targetStates[targetId];
         return targetState && targetState.isPending
             ? null
-            : this.metadataProvider.getQueryDataForTarget(targetId);
+            : this.metadataProvider.getTargetDataForTarget(targetId);
     };
     /**
      * Resets the state of a Watch target to its initial state (e.g. sets
@@ -15594,22 +16844,30 @@ var RemoteStore = /** @class */ (function () {
             });
         });
     };
-    /** Starts new listen for the given query. Uses resume token if provided */
-    RemoteStore.prototype.listen = function (queryData) {
-        assert(!contains$1(this.listenTargets, queryData.targetId), 'listen called with duplicate targetId!');
+    /**
+     * Starts new listen for the given target. Uses resume token if provided. It
+     * is a no-op if the target of given `TargetData` is already being listened to.
+     */
+    RemoteStore.prototype.listen = function (targetData) {
+        if (contains$1(this.listenTargets, targetData.targetId)) {
+            return;
+        }
         // Mark this as something the client is currently listening for.
-        this.listenTargets[queryData.targetId] = queryData;
+        this.listenTargets[targetData.targetId] = targetData;
         if (this.shouldStartWatchStream()) {
             // The listen will be sent in onWatchStreamOpen
             this.startWatchStream();
         }
         else if (this.watchStream.isOpen()) {
-            this.sendWatchRequest(queryData);
+            this.sendWatchRequest(targetData);
         }
     };
-    /** Removes the listen from server */
+    /**
+     * Removes the listen from server. It is a no-op if the given target id is
+     * not being listened to.
+     */
     RemoteStore.prototype.unlisten = function (targetId) {
-        assert(contains$1(this.listenTargets, targetId), 'unlisten called without assigned target ID!');
+        assert(contains$1(this.listenTargets, targetId), "unlisten called on target no currently watched: " + targetId);
         delete this.listenTargets[targetId];
         if (this.watchStream.isOpen()) {
             this.sendUnwatchRequest(targetId);
@@ -15626,8 +16884,8 @@ var RemoteStore = /** @class */ (function () {
             }
         }
     };
-    /** {@link TargetMetadataProvider.getQueryDataForTarget} */
-    RemoteStore.prototype.getQueryDataForTarget = function (targetId) {
+    /** {@link TargetMetadataProvider.getTargetDataForTarget} */
+    RemoteStore.prototype.getTargetDataForTarget = function (targetId) {
         return this.listenTargets[targetId] || null;
     };
     /** {@link TargetMetadataProvider.getRemoteKeysForTarget} */
@@ -15638,9 +16896,9 @@ var RemoteStore = /** @class */ (function () {
      * We need to increment the the expected number of pending responses we're due
      * from watch so we wait for the ack to process any messages from this target.
      */
-    RemoteStore.prototype.sendWatchRequest = function (queryData) {
-        this.watchChangeAggregator.recordPendingTargetRequest(queryData.targetId);
-        this.watchStream.watch(queryData);
+    RemoteStore.prototype.sendWatchRequest = function (targetData) {
+        this.watchChangeAggregator.recordPendingTargetRequest(targetData.targetId);
+        this.watchStream.watch(targetData);
     };
     /**
      * We need to increment the expected number of pending responses we're due
@@ -15676,8 +16934,8 @@ var RemoteStore = /** @class */ (function () {
         return __awaiter(this, void 0, void 0, function () {
             var _this = this;
             return __generator(this, function (_a) {
-                forEachNumber(this.listenTargets, function (targetId, queryData) {
-                    _this.sendWatchRequest(queryData);
+                forEachNumber(this.listenTargets, function (targetId, targetData) {
+                    _this.sendWatchRequest(targetData);
                 });
                 return [2 /*return*/];
             });
@@ -15763,33 +17021,33 @@ var RemoteStore = /** @class */ (function () {
         // persistent view of these when applying the completed RemoteEvent.
         forEachNumber(remoteEvent.targetChanges, function (targetId, change) {
             if (change.resumeToken.length > 0) {
-                var queryData = _this.listenTargets[targetId];
+                var targetData = _this.listenTargets[targetId];
                 // A watched target might have been removed already.
-                if (queryData) {
-                    _this.listenTargets[targetId] = queryData.withResumeToken(change.resumeToken, snapshotVersion);
+                if (targetData) {
+                    _this.listenTargets[targetId] = targetData.withResumeToken(change.resumeToken, snapshotVersion);
                 }
             }
         });
         // Re-establish listens for the targets that have been invalidated by
         // existence filter mismatches.
         remoteEvent.targetMismatches.forEach(function (targetId) {
-            var queryData = _this.listenTargets[targetId];
-            if (!queryData) {
+            var targetData = _this.listenTargets[targetId];
+            if (!targetData) {
                 // A watched target might have been removed already.
                 return;
             }
-            // Clear the resume token for the query, since we're in a known mismatch
+            // Clear the resume token for the target, since we're in a known mismatch
             // state.
-            _this.listenTargets[targetId] = queryData.withResumeToken(emptyByteString(), queryData.snapshotVersion);
+            _this.listenTargets[targetId] = targetData.withResumeToken(emptyByteString(), targetData.snapshotVersion);
             // Cause a hard reset by unwatching and rewatching immediately, but
             // deliberately don't send a resume token so that we get a full update.
             _this.sendUnwatchRequest(targetId);
-            // Mark the query we send as being on behalf of an existence filter
+            // Mark the target we send as being on behalf of an existence filter
             // mismatch, but don't actually retain that in listenTargets. This ensures
             // that we flag the first re-listen this way without impacting future
             // listens of this target (that might happen e.g. on reconnect).
-            var requestQueryData = new QueryData(queryData.query, targetId, QueryPurpose.ExistenceFilterMismatch, queryData.sequenceNumber);
-            _this.sendWatchRequest(requestQueryData);
+            var requestTargetData = new TargetData(targetData.target, targetId, TargetPurpose.ExistenceFilterMismatch, targetData.sequenceNumber);
+            _this.sendWatchRequest(requestTargetData);
         });
         // Finally raise remote event
         return this.syncEngine.applyRemoteEvent(remoteEvent);
@@ -16136,715 +17394,6 @@ var GeoPoint = /** @class */ (function () {
     };
     return GeoPoint;
 }());
-
-/**
- * @license
- * Copyright 2017 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var Query = /** @class */ (function () {
-    /**
-     * Initializes a Query with a path and optional additional query constraints.
-     * Path must currently be empty if this is a collection group query.
-     */
-    function Query(path, collectionGroup, explicitOrderBy, filters, limit, startAt, endAt) {
-        if (collectionGroup === void 0) { collectionGroup = null; }
-        if (explicitOrderBy === void 0) { explicitOrderBy = []; }
-        if (filters === void 0) { filters = []; }
-        if (limit === void 0) { limit = null; }
-        if (startAt === void 0) { startAt = null; }
-        if (endAt === void 0) { endAt = null; }
-        this.path = path;
-        this.collectionGroup = collectionGroup;
-        this.explicitOrderBy = explicitOrderBy;
-        this.filters = filters;
-        this.limit = limit;
-        this.startAt = startAt;
-        this.endAt = endAt;
-        this.memoizedCanonicalId = null;
-        this.memoizedOrderBy = null;
-        if (this.startAt) {
-            this.assertValidBound(this.startAt);
-        }
-        if (this.endAt) {
-            this.assertValidBound(this.endAt);
-        }
-    }
-    Query.atPath = function (path) {
-        return new Query(path);
-    };
-    Object.defineProperty(Query.prototype, "orderBy", {
-        get: function () {
-            if (this.memoizedOrderBy === null) {
-                var inequalityField = this.getInequalityFilterField();
-                var firstOrderByField = this.getFirstOrderByField();
-                if (inequalityField !== null && firstOrderByField === null) {
-                    // In order to implicitly add key ordering, we must also add the
-                    // inequality filter field for it to be a valid query.
-                    // Note that the default inequality field and key ordering is ascending.
-                    if (inequalityField.isKeyField()) {
-                        this.memoizedOrderBy = [KEY_ORDERING_ASC];
-                    }
-                    else {
-                        this.memoizedOrderBy = [
-                            new OrderBy(inequalityField),
-                            KEY_ORDERING_ASC
-                        ];
-                    }
-                }
-                else {
-                    assert(inequalityField === null ||
-                        (firstOrderByField !== null &&
-                            inequalityField.isEqual(firstOrderByField)), 'First orderBy should match inequality field.');
-                    this.memoizedOrderBy = [];
-                    var foundKeyOrdering = false;
-                    for (var _i = 0, _a = this.explicitOrderBy; _i < _a.length; _i++) {
-                        var orderBy = _a[_i];
-                        this.memoizedOrderBy.push(orderBy);
-                        if (orderBy.field.isKeyField()) {
-                            foundKeyOrdering = true;
-                        }
-                    }
-                    if (!foundKeyOrdering) {
-                        // The order of the implicit key ordering always matches the last
-                        // explicit order by
-                        var lastDirection = this.explicitOrderBy.length > 0
-                            ? this.explicitOrderBy[this.explicitOrderBy.length - 1].dir
-                            : Direction.ASCENDING;
-                        this.memoizedOrderBy.push(lastDirection === Direction.ASCENDING
-                            ? KEY_ORDERING_ASC
-                            : KEY_ORDERING_DESC);
-                    }
-                }
-            }
-            return this.memoizedOrderBy;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    Query.prototype.addFilter = function (filter) {
-        assert(this.getInequalityFilterField() == null ||
-            !(filter instanceof FieldFilter) ||
-            !filter.isInequality() ||
-            filter.field.isEqual(this.getInequalityFilterField()), 'Query must only have one inequality field.');
-        assert(!this.isDocumentQuery(), 'No filtering allowed for document query');
-        var newFilters = this.filters.concat([filter]);
-        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), newFilters, this.limit, this.startAt, this.endAt);
-    };
-    Query.prototype.addOrderBy = function (orderBy) {
-        assert(!this.startAt && !this.endAt, 'Bounds must be set after orderBy');
-        // TODO(dimond): validate that orderBy does not list the same key twice.
-        var newOrderBy = this.explicitOrderBy.concat([orderBy]);
-        return new Query(this.path, this.collectionGroup, newOrderBy, this.filters.slice(), this.limit, this.startAt, this.endAt);
-    };
-    Query.prototype.withLimit = function (limit) {
-        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), limit, this.startAt, this.endAt);
-    };
-    Query.prototype.withStartAt = function (bound) {
-        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), this.limit, bound, this.endAt);
-    };
-    Query.prototype.withEndAt = function (bound) {
-        return new Query(this.path, this.collectionGroup, this.explicitOrderBy.slice(), this.filters.slice(), this.limit, this.startAt, bound);
-    };
-    /**
-     * Helper to convert a collection group query into a collection query at a
-     * specific path. This is used when executing collection group queries, since
-     * we have to split the query into a set of collection queries at multiple
-     * paths.
-     */
-    Query.prototype.asCollectionQueryAtPath = function (path) {
-        return new Query(path, 
-        /*collectionGroup=*/ null, this.explicitOrderBy.slice(), this.filters.slice(), this.limit, this.startAt, this.endAt);
-    };
-    /**
-     * Returns true if this query does not specify any query constraints that
-     * could remove results.
-     */
-    Query.prototype.matchesAllDocuments = function () {
-        return (this.filters.length === 0 &&
-            this.limit === null &&
-            this.startAt == null &&
-            this.endAt == null &&
-            (this.explicitOrderBy.length === 0 ||
-                (this.explicitOrderBy.length === 1 &&
-                    this.explicitOrderBy[0].field.isKeyField())));
-    };
-    // TODO(b/29183165): This is used to get a unique string from a query to, for
-    // example, use as a dictionary key, but the implementation is subject to
-    // collisions. Make it collision-free.
-    Query.prototype.canonicalId = function () {
-        if (this.memoizedCanonicalId === null) {
-            var canonicalId = this.path.canonicalString();
-            if (this.isCollectionGroupQuery()) {
-                canonicalId += '|cg:' + this.collectionGroup;
-            }
-            canonicalId += '|f:';
-            for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
-                var filter = _a[_i];
-                canonicalId += filter.canonicalId();
-                canonicalId += ',';
-            }
-            canonicalId += '|ob:';
-            // TODO(dimond): make this collision resistant
-            for (var _b = 0, _c = this.orderBy; _b < _c.length; _b++) {
-                var orderBy = _c[_b];
-                canonicalId += orderBy.canonicalId();
-                canonicalId += ',';
-            }
-            if (!isNullOrUndefined(this.limit)) {
-                canonicalId += '|l:';
-                canonicalId += this.limit;
-            }
-            if (this.startAt) {
-                canonicalId += '|lb:';
-                canonicalId += this.startAt.canonicalId();
-            }
-            if (this.endAt) {
-                canonicalId += '|ub:';
-                canonicalId += this.endAt.canonicalId();
-            }
-            this.memoizedCanonicalId = canonicalId;
-        }
-        return this.memoizedCanonicalId;
-    };
-    Query.prototype.toString = function () {
-        var str = 'Query(' + this.path.canonicalString();
-        if (this.isCollectionGroupQuery()) {
-            str += ' collectionGroup=' + this.collectionGroup;
-        }
-        if (this.filters.length > 0) {
-            str += ", filters: [" + this.filters.join(', ') + "]";
-        }
-        if (!isNullOrUndefined(this.limit)) {
-            str += ', limit: ' + this.limit;
-        }
-        if (this.explicitOrderBy.length > 0) {
-            str += ", orderBy: [" + this.explicitOrderBy.join(', ') + "]";
-        }
-        if (this.startAt) {
-            str += ', startAt: ' + this.startAt.canonicalId();
-        }
-        if (this.endAt) {
-            str += ', endAt: ' + this.endAt.canonicalId();
-        }
-        return str + ')';
-    };
-    Query.prototype.isEqual = function (other) {
-        if (this.limit !== other.limit) {
-            return false;
-        }
-        if (this.orderBy.length !== other.orderBy.length) {
-            return false;
-        }
-        for (var i = 0; i < this.orderBy.length; i++) {
-            if (!this.orderBy[i].isEqual(other.orderBy[i])) {
-                return false;
-            }
-        }
-        if (this.filters.length !== other.filters.length) {
-            return false;
-        }
-        for (var i = 0; i < this.filters.length; i++) {
-            if (!this.filters[i].isEqual(other.filters[i])) {
-                return false;
-            }
-        }
-        if (this.collectionGroup !== other.collectionGroup) {
-            return false;
-        }
-        if (!this.path.isEqual(other.path)) {
-            return false;
-        }
-        if (this.startAt !== null
-            ? !this.startAt.isEqual(other.startAt)
-            : other.startAt !== null) {
-            return false;
-        }
-        return this.endAt !== null
-            ? this.endAt.isEqual(other.endAt)
-            : other.endAt === null;
-    };
-    Query.prototype.docComparator = function (d1, d2) {
-        var comparedOnKeyField = false;
-        for (var _i = 0, _a = this.orderBy; _i < _a.length; _i++) {
-            var orderBy = _a[_i];
-            var comp = orderBy.compare(d1, d2);
-            if (comp !== 0) {
-                return comp;
-            }
-            comparedOnKeyField = comparedOnKeyField || orderBy.field.isKeyField();
-        }
-        // Assert that we actually compared by key
-        assert(comparedOnKeyField, "orderBy used that doesn't compare on key field");
-        return 0;
-    };
-    Query.prototype.matches = function (doc) {
-        return (this.matchesPathAndCollectionGroup(doc) &&
-            this.matchesOrderBy(doc) &&
-            this.matchesFilters(doc) &&
-            this.matchesBounds(doc));
-    };
-    Query.prototype.hasLimit = function () {
-        return !isNullOrUndefined(this.limit);
-    };
-    Query.prototype.getFirstOrderByField = function () {
-        return this.explicitOrderBy.length > 0
-            ? this.explicitOrderBy[0].field
-            : null;
-    };
-    Query.prototype.getInequalityFilterField = function () {
-        for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
-            var filter = _a[_i];
-            if (filter instanceof FieldFilter && filter.isInequality()) {
-                return filter.field;
-            }
-        }
-        return null;
-    };
-    // Checks if any of the provided Operators are included in the query and
-    // returns the first one that is, or null if none are.
-    Query.prototype.findFilterOperator = function (operators) {
-        for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
-            var filter = _a[_i];
-            if (filter instanceof FieldFilter) {
-                if (operators.indexOf(filter.op) >= 0) {
-                    return filter.op;
-                }
-            }
-        }
-        return null;
-    };
-    Query.prototype.isDocumentQuery = function () {
-        return (DocumentKey.isDocumentKey(this.path) &&
-            this.collectionGroup === null &&
-            this.filters.length === 0);
-    };
-    Query.prototype.isCollectionGroupQuery = function () {
-        return this.collectionGroup !== null;
-    };
-    Query.prototype.matchesPathAndCollectionGroup = function (doc) {
-        var docPath = doc.key.path;
-        if (this.collectionGroup !== null) {
-            // NOTE: this.path is currently always empty since we don't expose Collection
-            // Group queries rooted at a document path yet.
-            return (doc.key.hasCollectionId(this.collectionGroup) &&
-                this.path.isPrefixOf(docPath));
-        }
-        else if (DocumentKey.isDocumentKey(this.path)) {
-            // exact match for document queries
-            return this.path.isEqual(docPath);
-        }
-        else {
-            // shallow ancestor queries by default
-            return this.path.isImmediateParentOf(docPath);
-        }
-    };
-    /**
-     * A document must have a value for every ordering clause in order to show up
-     * in the results.
-     */
-    Query.prototype.matchesOrderBy = function (doc) {
-        for (var _i = 0, _a = this.explicitOrderBy; _i < _a.length; _i++) {
-            var orderBy = _a[_i];
-            // order by key always matches
-            if (!orderBy.field.isKeyField() && doc.field(orderBy.field) === null) {
-                return false;
-            }
-        }
-        return true;
-    };
-    Query.prototype.matchesFilters = function (doc) {
-        for (var _i = 0, _a = this.filters; _i < _a.length; _i++) {
-            var filter = _a[_i];
-            if (!filter.matches(doc)) {
-                return false;
-            }
-        }
-        return true;
-    };
-    /**
-     * Makes sure a document is within the bounds, if provided.
-     */
-    Query.prototype.matchesBounds = function (doc) {
-        if (this.startAt && !this.startAt.sortsBeforeDocument(this.orderBy, doc)) {
-            return false;
-        }
-        if (this.endAt && this.endAt.sortsBeforeDocument(this.orderBy, doc)) {
-            return false;
-        }
-        return true;
-    };
-    Query.prototype.assertValidBound = function (bound) {
-        assert(bound.position.length <= this.orderBy.length, 'Bound is longer than orderBy');
-    };
-    return Query;
-}());
-var Filter = /** @class */ (function () {
-    function Filter() {
-    }
-    return Filter;
-}());
-var Operator = /** @class */ (function () {
-    function Operator(name) {
-        this.name = name;
-    }
-    Operator.fromString = function (op) {
-        switch (op) {
-            case '<':
-                return Operator.LESS_THAN;
-            case '<=':
-                return Operator.LESS_THAN_OR_EQUAL;
-            case '==':
-                return Operator.EQUAL;
-            case '>=':
-                return Operator.GREATER_THAN_OR_EQUAL;
-            case '>':
-                return Operator.GREATER_THAN;
-            case 'array-contains':
-                return Operator.ARRAY_CONTAINS;
-            case 'in':
-                return Operator.IN;
-            case 'array-contains-any':
-                return Operator.ARRAY_CONTAINS_ANY;
-            default:
-                return fail('Unknown FieldFilter operator: ' + op);
-        }
-    };
-    Operator.prototype.toString = function () {
-        return this.name;
-    };
-    Operator.prototype.isEqual = function (other) {
-        return this.name === other.name;
-    };
-    Operator.LESS_THAN = new Operator('<');
-    Operator.LESS_THAN_OR_EQUAL = new Operator('<=');
-    Operator.EQUAL = new Operator('==');
-    Operator.GREATER_THAN = new Operator('>');
-    Operator.GREATER_THAN_OR_EQUAL = new Operator('>=');
-    Operator.ARRAY_CONTAINS = new Operator('array-contains');
-    Operator.IN = new Operator('in');
-    Operator.ARRAY_CONTAINS_ANY = new Operator('array-contains-any');
-    return Operator;
-}());
-var FieldFilter = /** @class */ (function (_super) {
-    __extends(FieldFilter, _super);
-    function FieldFilter(field, op, value) {
-        var _this = _super.call(this) || this;
-        _this.field = field;
-        _this.op = op;
-        _this.value = value;
-        return _this;
-    }
-    /**
-     * Creates a filter based on the provided arguments.
-     */
-    FieldFilter.create = function (field, op, value) {
-        if (field.isKeyField()) {
-            if (op === Operator.IN) {
-                assert(value instanceof ArrayValue, 'Comparing on key with IN, but filter value not an ArrayValue');
-                assert(value.internalValue.every(function (elem) {
-                    return elem instanceof RefValue;
-                }), 'Comparing on key with IN, but an array value was not a RefValue');
-                return new KeyFieldInFilter(field, value);
-            }
-            else {
-                assert(value instanceof RefValue, 'Comparing on key, but filter value not a RefValue');
-                assert(op !== Operator.ARRAY_CONTAINS && op !== Operator.ARRAY_CONTAINS_ANY, "'" + op.toString() + "' queries don't make sense on document keys.");
-                return new KeyFieldFilter(field, op, value);
-            }
-        }
-        else if (value.isEqual(NullValue.INSTANCE)) {
-            if (op !== Operator.EQUAL) {
-                throw new FirestoreError(Code.INVALID_ARGUMENT, 'Invalid query. Null supports only equality comparisons.');
-            }
-            return new FieldFilter(field, op, value);
-        }
-        else if (value.isEqual(DoubleValue.NAN)) {
-            if (op !== Operator.EQUAL) {
-                throw new FirestoreError(Code.INVALID_ARGUMENT, 'Invalid query. NaN supports only equality comparisons.');
-            }
-            return new FieldFilter(field, op, value);
-        }
-        else if (op === Operator.ARRAY_CONTAINS) {
-            return new ArrayContainsFilter(field, value);
-        }
-        else if (op === Operator.IN) {
-            assert(value instanceof ArrayValue, 'IN filter has invalid value: ' + value.toString());
-            return new InFilter(field, value);
-        }
-        else if (op === Operator.ARRAY_CONTAINS_ANY) {
-            assert(value instanceof ArrayValue, 'ARRAY_CONTAINS_ANY filter has invalid value: ' + value.toString());
-            return new ArrayContainsAnyFilter(field, value);
-        }
-        else {
-            return new FieldFilter(field, op, value);
-        }
-    };
-    FieldFilter.prototype.matches = function (doc) {
-        var other = doc.field(this.field);
-        // Only compare types with matching backend order (such as double and int).
-        return (other !== null &&
-            this.value.typeOrder === other.typeOrder &&
-            this.matchesComparison(other.compareTo(this.value)));
-    };
-    FieldFilter.prototype.matchesComparison = function (comparison) {
-        switch (this.op) {
-            case Operator.LESS_THAN:
-                return comparison < 0;
-            case Operator.LESS_THAN_OR_EQUAL:
-                return comparison <= 0;
-            case Operator.EQUAL:
-                return comparison === 0;
-            case Operator.GREATER_THAN:
-                return comparison > 0;
-            case Operator.GREATER_THAN_OR_EQUAL:
-                return comparison >= 0;
-            default:
-                return fail('Unknown FieldFilter operator: ' + this.op);
-        }
-    };
-    FieldFilter.prototype.isInequality = function () {
-        return ([
-            Operator.LESS_THAN,
-            Operator.LESS_THAN_OR_EQUAL,
-            Operator.GREATER_THAN,
-            Operator.GREATER_THAN_OR_EQUAL
-        ].indexOf(this.op) >= 0);
-    };
-    FieldFilter.prototype.canonicalId = function () {
-        // TODO(b/29183165): Technically, this won't be unique if two values have
-        // the same description, such as the int 3 and the string "3". So we should
-        // add the types in here somehow, too.
-        return (this.field.canonicalString() + this.op.toString() + this.value.toString());
-    };
-    FieldFilter.prototype.isEqual = function (other) {
-        if (other instanceof FieldFilter) {
-            return (this.op.isEqual(other.op) &&
-                this.field.isEqual(other.field) &&
-                this.value.isEqual(other.value));
-        }
-        else {
-            return false;
-        }
-    };
-    FieldFilter.prototype.toString = function () {
-        return this.field.canonicalString() + " " + this.op + " " + this.value.value();
-    };
-    return FieldFilter;
-}(Filter));
-/** Filter that matches on key fields (i.e. '__name__'). */
-var KeyFieldFilter = /** @class */ (function (_super) {
-    __extends(KeyFieldFilter, _super);
-    function KeyFieldFilter() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    KeyFieldFilter.prototype.matches = function (doc) {
-        var refValue = this.value;
-        var comparison = DocumentKey.comparator(doc.key, refValue.key);
-        return this.matchesComparison(comparison);
-    };
-    return KeyFieldFilter;
-}(FieldFilter));
-/** Filter that matches on key fields within an array. */
-var KeyFieldInFilter = /** @class */ (function (_super) {
-    __extends(KeyFieldInFilter, _super);
-    function KeyFieldInFilter(field, value) {
-        var _this = _super.call(this, field, Operator.IN, value) || this;
-        _this.value = value;
-        return _this;
-    }
-    KeyFieldInFilter.prototype.matches = function (doc) {
-        var arrayValue = this.value;
-        return arrayValue.internalValue.some(function (refValue) {
-            return doc.key.isEqual(refValue.key);
-        });
-    };
-    return KeyFieldInFilter;
-}(FieldFilter));
-/** A Filter that implements the array-contains operator. */
-var ArrayContainsFilter = /** @class */ (function (_super) {
-    __extends(ArrayContainsFilter, _super);
-    function ArrayContainsFilter(field, value) {
-        return _super.call(this, field, Operator.ARRAY_CONTAINS, value) || this;
-    }
-    ArrayContainsFilter.prototype.matches = function (doc) {
-        var other = doc.field(this.field);
-        return other instanceof ArrayValue && other.contains(this.value);
-    };
-    return ArrayContainsFilter;
-}(FieldFilter));
-/** A Filter that implements the IN operator. */
-var InFilter = /** @class */ (function (_super) {
-    __extends(InFilter, _super);
-    function InFilter(field, value) {
-        var _this = _super.call(this, field, Operator.IN, value) || this;
-        _this.value = value;
-        return _this;
-    }
-    InFilter.prototype.matches = function (doc) {
-        var arrayValue = this.value;
-        var other = doc.field(this.field);
-        return other !== null && arrayValue.contains(other);
-    };
-    return InFilter;
-}(FieldFilter));
-/** A Filter that implements the array-contains-any operator. */
-var ArrayContainsAnyFilter = /** @class */ (function (_super) {
-    __extends(ArrayContainsAnyFilter, _super);
-    function ArrayContainsAnyFilter(field, value) {
-        var _this = _super.call(this, field, Operator.ARRAY_CONTAINS_ANY, value) || this;
-        _this.value = value;
-        return _this;
-    }
-    ArrayContainsAnyFilter.prototype.matches = function (doc) {
-        var _this = this;
-        var other = doc.field(this.field);
-        return (other instanceof ArrayValue &&
-            other.internalValue.some(function (lhsElem) {
-                return _this.value.contains(lhsElem);
-            }));
-    };
-    return ArrayContainsAnyFilter;
-}(FieldFilter));
-/**
- * The direction of sorting in an order by.
- */
-var Direction = /** @class */ (function () {
-    function Direction(name) {
-        this.name = name;
-    }
-    Direction.prototype.toString = function () {
-        return this.name;
-    };
-    Direction.ASCENDING = new Direction('asc');
-    Direction.DESCENDING = new Direction('desc');
-    return Direction;
-}());
-/**
- * Represents a bound of a query.
- *
- * The bound is specified with the given components representing a position and
- * whether it's just before or just after the position (relative to whatever the
- * query order is).
- *
- * The position represents a logical index position for a query. It's a prefix
- * of values for the (potentially implicit) order by clauses of a query.
- *
- * Bound provides a function to determine whether a document comes before or
- * after a bound. This is influenced by whether the position is just before or
- * just after the provided values.
- */
-var Bound = /** @class */ (function () {
-    function Bound(position, before) {
-        this.position = position;
-        this.before = before;
-    }
-    Bound.prototype.canonicalId = function () {
-        // TODO(b/29183165): Make this collision robust.
-        var canonicalId = this.before ? 'b:' : 'a:';
-        for (var _i = 0, _a = this.position; _i < _a.length; _i++) {
-            var component = _a[_i];
-            canonicalId += component.toString();
-        }
-        return canonicalId;
-    };
-    /**
-     * Returns true if a document sorts before a bound using the provided sort
-     * order.
-     */
-    Bound.prototype.sortsBeforeDocument = function (orderBy, doc) {
-        assert(this.position.length <= orderBy.length, "Bound has more components than query's orderBy");
-        var comparison = 0;
-        for (var i = 0; i < this.position.length; i++) {
-            var orderByComponent = orderBy[i];
-            var component = this.position[i];
-            if (orderByComponent.field.isKeyField()) {
-                assert(component instanceof RefValue, 'Bound has a non-key value where the key path is being used.');
-                comparison = DocumentKey.comparator(component.key, doc.key);
-            }
-            else {
-                var docValue = doc.field(orderByComponent.field);
-                assert(docValue !== null, 'Field should exist since document matched the orderBy already.');
-                comparison = component.compareTo(docValue);
-            }
-            if (orderByComponent.dir === Direction.DESCENDING) {
-                comparison = comparison * -1;
-            }
-            if (comparison !== 0) {
-                break;
-            }
-        }
-        return this.before ? comparison <= 0 : comparison < 0;
-    };
-    Bound.prototype.isEqual = function (other) {
-        if (other === null) {
-            return false;
-        }
-        if (this.before !== other.before ||
-            this.position.length !== other.position.length) {
-            return false;
-        }
-        for (var i = 0; i < this.position.length; i++) {
-            var thisPosition = this.position[i];
-            var otherPosition = other.position[i];
-            if (!thisPosition.isEqual(otherPosition)) {
-                return false;
-            }
-        }
-        return true;
-    };
-    return Bound;
-}());
-/**
- * An ordering on a field, in some Direction. Direction defaults to ASCENDING.
- */
-var OrderBy = /** @class */ (function () {
-    function OrderBy(field, dir) {
-        this.field = field;
-        if (dir === undefined) {
-            dir = Direction.ASCENDING;
-        }
-        this.dir = dir;
-        this.isKeyOrderBy = field.isKeyField();
-    }
-    OrderBy.prototype.compare = function (d1, d2) {
-        var comparison = this.isKeyOrderBy
-            ? Document.compareByKey(d1, d2)
-            : Document.compareByField(this.field, d1, d2);
-        switch (this.dir) {
-            case Direction.ASCENDING:
-                return comparison;
-            case Direction.DESCENDING:
-                return -1 * comparison;
-            default:
-                return fail('Unknown direction: ' + this.dir);
-        }
-    };
-    OrderBy.prototype.canonicalId = function () {
-        // TODO(b/29183165): Make this collision robust.
-        return this.field.canonicalString() + this.dir.toString();
-    };
-    OrderBy.prototype.toString = function () {
-        return this.field.canonicalString() + " (" + this.dir + ")";
-    };
-    OrderBy.prototype.isEqual = function (other) {
-        return this.dir === other.dir && this.field.isEqual(other.field);
-    };
-    return OrderBy;
-}());
-var KEY_ORDERING_ASC = new OrderBy(FieldPath.keyField(), Direction.ASCENDING);
-var KEY_ORDERING_DESC = new OrderBy(FieldPath.keyField(), Direction.DESCENDING);
 
 /**
  * @license
@@ -17293,7 +17842,7 @@ var JsonProtoSerializer = /** @class */ (function () {
         // In v1beta1 queries for collections at the root did not have a trailing
         // "/documents". In v1 all resource paths contain "/documents". Preserve the
         // ability to read the v1beta1 form for compatibility with queries persisted
-        // in the local query cache.
+        // in the local target cache.
         if (resourceName.length === 4) {
             return ResourcePath.EMPTY_PATH;
         }
@@ -17631,10 +18180,10 @@ var JsonProtoSerializer = /** @class */ (function () {
         }
         else if ('documentChange' in change) {
             assertPresent(change.documentChange, 'documentChange');
-            assertPresent(change.documentChange.document, 'documentChange.name');
-            assertPresent(change.documentChange.document.name, 'documentChange.document.name');
-            assertPresent(change.documentChange.document.updateTime, 'documentChange.document.updateTime');
             var entityChange = change.documentChange;
+            assertPresent(entityChange.document, 'documentChange.name');
+            assertPresent(entityChange.document.name, 'documentChange.document.name');
+            assertPresent(entityChange.document.updateTime, 'documentChange.document.updateTime');
             var key = this.fromName(entityChange.document.name);
             var version = this.fromVersion(entityChange.document.updateTime);
             var doc = new Document(key, version, {}, undefined, entityChange.document, function (v) { return _this.fromValue(v); });
@@ -17644,8 +18193,8 @@ var JsonProtoSerializer = /** @class */ (function () {
         }
         else if ('documentDelete' in change) {
             assertPresent(change.documentDelete, 'documentDelete');
-            assertPresent(change.documentDelete.document, 'documentDelete.document');
             var docDelete = change.documentDelete;
+            assertPresent(docDelete.document, 'documentDelete.document');
             var key = this.fromName(docDelete.document);
             var version = docDelete.readTime
                 ? this.fromVersion(docDelete.readTime)
@@ -17656,8 +18205,8 @@ var JsonProtoSerializer = /** @class */ (function () {
         }
         else if ('documentRemove' in change) {
             assertPresent(change.documentRemove, 'documentRemove');
-            assertPresent(change.documentRemove.document, 'documentRemove');
             var docRemove = change.documentRemove;
+            assertPresent(docRemove.document, 'documentRemove');
             var key = this.fromName(docRemove.document);
             var removedTargetIds = docRemove.removedTargetIds || [];
             watchChange = new DocumentWatchChange([], removedTargetIds, key, null);
@@ -17665,8 +18214,8 @@ var JsonProtoSerializer = /** @class */ (function () {
         else if ('filter' in change) {
             // TODO(dimond): implement existence filter parsing with strategy.
             assertPresent(change.filter, 'filter');
-            assertPresent(change.filter.targetId, 'filter.targetId');
             var filter = change.filter;
+            assertPresent(filter.targetId, 'filter.targetId');
             var count = filter.count || 0;
             var existenceFilter = new ExistenceFilter(count);
             var targetId = filter.targetId;
@@ -17899,25 +18448,25 @@ var JsonProtoSerializer = /** @class */ (function () {
         var fieldPath = FieldPath.fromServerFormat(proto.fieldPath);
         return new FieldTransform(fieldPath, transform);
     };
-    JsonProtoSerializer.prototype.toDocumentsTarget = function (query) {
-        return { documents: [this.toQueryPath(query.path)] };
+    JsonProtoSerializer.prototype.toDocumentsTarget = function (target) {
+        return { documents: [this.toQueryPath(target.path)] };
     };
     JsonProtoSerializer.prototype.fromDocumentsTarget = function (documentsTarget) {
         var count = documentsTarget.documents.length;
         assert(count === 1, 'DocumentsTarget contained other than 1 document: ' + count);
         var name = documentsTarget.documents[0];
-        return Query.atPath(this.fromQueryPath(name));
+        return Query.atPath(this.fromQueryPath(name)).toTarget();
     };
-    JsonProtoSerializer.prototype.toQueryTarget = function (query) {
+    JsonProtoSerializer.prototype.toQueryTarget = function (target) {
         // Dissect the path into parent, collectionId, and optional key filter.
         var result = { structuredQuery: {} };
-        var path = query.path;
-        if (query.collectionGroup !== null) {
+        var path = target.path;
+        if (target.collectionGroup !== null) {
             assert(path.length % 2 === 0, 'Collection Group queries should be within a document path or root.');
             result.parent = this.toQueryPath(path);
             result.structuredQuery.from = [
                 {
-                    collectionId: query.collectionGroup,
+                    collectionId: target.collectionGroup,
                     allDescendants: true
                 }
             ];
@@ -17927,23 +18476,23 @@ var JsonProtoSerializer = /** @class */ (function () {
             result.parent = this.toQueryPath(path.popLast());
             result.structuredQuery.from = [{ collectionId: path.lastSegment() }];
         }
-        var where = this.toFilter(query.filters);
+        var where = this.toFilter(target.filters);
         if (where) {
             result.structuredQuery.where = where;
         }
-        var orderBy = this.toOrder(query.orderBy);
+        var orderBy = this.toOrder(target.orderBy);
         if (orderBy) {
             result.structuredQuery.orderBy = orderBy;
         }
-        var limit = this.toInt32Value(query.limit);
+        var limit = this.toInt32Value(target.limit);
         if (limit !== null) {
             result.structuredQuery.limit = limit;
         }
-        if (query.startAt) {
-            result.structuredQuery.startAt = this.toCursor(query.startAt);
+        if (target.startAt) {
+            result.structuredQuery.startAt = this.toCursor(target.startAt);
         }
-        if (query.endAt) {
-            result.structuredQuery.endAt = this.toCursor(query.endAt);
+        if (target.endAt) {
+            result.structuredQuery.endAt = this.toCursor(target.endAt);
         }
         return result;
     };
@@ -17982,10 +18531,10 @@ var JsonProtoSerializer = /** @class */ (function () {
         if (query.endAt) {
             endAt = this.fromCursor(query.endAt);
         }
-        return new Query(path, collectionGroup, orderBy, filterBy, limit, startAt, endAt);
+        return new Query(path, collectionGroup, orderBy, filterBy, limit, LimitType.First, startAt, endAt).toTarget();
     };
-    JsonProtoSerializer.prototype.toListenRequestLabels = function (queryData) {
-        var value = this.toLabel(queryData.purpose);
+    JsonProtoSerializer.prototype.toListenRequestLabels = function (targetData) {
+        var value = this.toLabel(targetData.purpose);
         if (value == null) {
             return null;
         }
@@ -17997,28 +18546,28 @@ var JsonProtoSerializer = /** @class */ (function () {
     };
     JsonProtoSerializer.prototype.toLabel = function (purpose) {
         switch (purpose) {
-            case QueryPurpose.Listen:
+            case TargetPurpose.Listen:
                 return null;
-            case QueryPurpose.ExistenceFilterMismatch:
+            case TargetPurpose.ExistenceFilterMismatch:
                 return 'existence-filter-mismatch';
-            case QueryPurpose.LimboResolution:
+            case TargetPurpose.LimboResolution:
                 return 'limbo-document';
             default:
                 return fail('Unrecognized query purpose: ' + purpose);
         }
     };
-    JsonProtoSerializer.prototype.toTarget = function (queryData) {
+    JsonProtoSerializer.prototype.toTarget = function (targetData) {
         var result;
-        var query = queryData.query;
-        if (query.isDocumentQuery()) {
-            result = { documents: this.toDocumentsTarget(query) };
+        var target = targetData.target;
+        if (target.isDocumentQuery()) {
+            result = { documents: this.toDocumentsTarget(target) };
         }
         else {
-            result = { query: this.toQueryTarget(query) };
+            result = { query: this.toQueryTarget(target) };
         }
-        result.targetId = queryData.targetId;
-        if (queryData.resumeToken.length > 0) {
-            result.resumeToken = this.unsafeCastProtoByteString(queryData.resumeToken);
+        result.targetId = targetData.targetId;
+        if (targetData.resumeToken.length > 0) {
+            result.resumeToken = this.unsafeCastProtoByteString(targetData.resumeToken);
         }
         return result;
     };
@@ -18620,8 +19169,11 @@ var View = /** @class */ (function () {
         //
         // Note that this should never get used in a refill (when previousChanges is
         // set), because there will only be adds -- no deletes or updates.
-        var lastDocInLimit = this.query.hasLimit() && oldDocumentSet.size === this.query.limit
+        var lastDocInLimit = this.query.hasLimitToFirst() && oldDocumentSet.size === this.query.limit
             ? oldDocumentSet.last()
+            : null;
+        var firstDocInLimit = this.query.hasLimitToLast() && oldDocumentSet.size === this.query.limit
+            ? oldDocumentSet.first()
             : null;
         docChanges.inorderTraversal(function (key, newMaybeDoc) {
             var oldDoc = oldDocumentSet.get(key);
@@ -18653,11 +19205,13 @@ var View = /** @class */ (function () {
                             doc: newDoc
                         });
                         changeApplied = true;
-                        if (lastDocInLimit &&
-                            _this.query.docComparator(newDoc, lastDocInLimit) > 0) {
-                            // This doc moved from inside the limit to after the limit.
-                            // That means there may be some doc in the local cache that's
-                            // actually less than this one.
+                        if ((lastDocInLimit &&
+                            _this.query.docComparator(newDoc, lastDocInLimit) > 0) ||
+                            (firstDocInLimit &&
+                                _this.query.docComparator(newDoc, firstDocInLimit) < 0)) {
+                            // This doc moved from inside the limit to outside the limit.
+                            // That means there may be some other doc in the local cache
+                            // that should be included instead.
                             needsRefill = true;
                         }
                     }
@@ -18674,7 +19228,7 @@ var View = /** @class */ (function () {
             else if (oldDoc && !newDoc) {
                 changeSet.track({ type: ChangeType.Removed, doc: oldDoc });
                 changeApplied = true;
-                if (lastDocInLimit) {
+                if (lastDocInLimit || firstDocInLimit) {
                     // A doc was removed from a full limit query. We'll need to
                     // requery from the local cache to see if we know about some other
                     // doc that should be in the results.
@@ -18697,9 +19251,12 @@ var View = /** @class */ (function () {
                 }
             }
         });
-        if (this.query.hasLimit()) {
+        // Drop documents out to meet limit/limitToLast requirement.
+        if (this.query.hasLimitToFirst() || this.query.hasLimitToLast()) {
             while (newDocumentSet.size > this.query.limit) {
-                var oldDoc = newDocumentSet.last();
+                var oldDoc = this.query.hasLimitToFirst()
+                    ? newDocumentSet.last()
+                    : newDocumentSet.first();
                 newDocumentSet = newDocumentSet.delete(oldDoc.key);
                 newMutatedKeys = newMutatedKeys.delete(oldDoc.key);
                 changeSet.track({ type: ChangeType.Removed, doc: oldDoc });
@@ -19110,7 +19667,7 @@ var SyncEngine = /** @class */ (function () {
         this.queryViewsByQuery = new ObjectMap(function (q) {
             return q.canonicalId();
         });
-        this.queryViewsByTarget = {};
+        this.queriesByTarget = {};
         this.limboTargetsByKey = new SortedMap(DocumentKey.comparator);
         this.limboResolutionsByTarget = {};
         this.limboDocumentRefs = new ReferenceSet();
@@ -19146,7 +19703,7 @@ var SyncEngine = /** @class */ (function () {
      */
     SyncEngine.prototype.listen = function (query) {
         return __awaiter(this, void 0, void 0, function () {
-            var targetId, viewSnapshot, queryView, queryData, status_1;
+            var targetId, viewSnapshot, queryView, targetData, status_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -19163,16 +19720,16 @@ var SyncEngine = /** @class */ (function () {
                         this.sharedClientState.addLocalQueryTarget(targetId);
                         viewSnapshot = queryView.view.computeInitialSnapshot();
                         return [3 /*break*/, 4];
-                    case 1: return [4 /*yield*/, this.localStore.allocateQuery(query)];
+                    case 1: return [4 /*yield*/, this.localStore.allocateTarget(query.toTarget())];
                     case 2:
-                        queryData = _a.sent();
-                        status_1 = this.sharedClientState.addLocalQueryTarget(queryData.targetId);
-                        targetId = queryData.targetId;
-                        return [4 /*yield*/, this.initializeViewAndComputeSnapshot(queryData, status_1 === 'current')];
+                        targetData = _a.sent();
+                        status_1 = this.sharedClientState.addLocalQueryTarget(targetData.targetId);
+                        targetId = targetData.targetId;
+                        return [4 /*yield*/, this.initializeViewAndComputeSnapshot(query, targetId, status_1 === 'current')];
                     case 3:
                         viewSnapshot = _a.sent();
                         if (this.isPrimary) {
-                            this.remoteStore.listen(queryData);
+                            this.remoteStore.listen(targetData);
                         }
                         _a.label = 4;
                     case 4:
@@ -19186,27 +19743,28 @@ var SyncEngine = /** @class */ (function () {
      * Registers a view for a previously unknown query and computes its initial
      * snapshot.
      */
-    SyncEngine.prototype.initializeViewAndComputeSnapshot = function (queryData, current) {
+    SyncEngine.prototype.initializeViewAndComputeSnapshot = function (query, targetId, current) {
         return __awaiter(this, void 0, void 0, function () {
-            var query, queryResult, view, viewDocChanges, synthesizedTargetChange, viewChange, data;
+            var queryResult, view, viewDocChanges, synthesizedTargetChange, viewChange, data;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0:
-                        query = queryData.query;
-                        return [4 /*yield*/, this.localStore.executeQuery(query, 
-                            /* usePreviousResults= */ true)];
+                    case 0: return [4 /*yield*/, this.localStore.executeQuery(query, 
+                        /* usePreviousResults= */ true)];
                     case 1:
                         queryResult = _a.sent();
                         view = new View(query, queryResult.remoteKeys);
                         viewDocChanges = view.computeDocChanges(queryResult.documents);
-                        synthesizedTargetChange = TargetChange.createSynthesizedTargetChangeForCurrentChange(queryData.targetId, current && this.onlineState !== OnlineState.Offline);
+                        synthesizedTargetChange = TargetChange.createSynthesizedTargetChangeForCurrentChange(targetId, current && this.onlineState !== OnlineState.Offline);
                         viewChange = view.applyChanges(viewDocChanges, 
                         /* updateLimboDocuments= */ this.isPrimary === true, synthesizedTargetChange);
                         assert(viewChange.limboChanges.length === 0, 'View returned limbo docs before target ack from the server.');
                         assert(!!viewChange.snapshot, 'applyChanges for new view should always return a snapshot');
-                        data = new QueryView(query, queryData.targetId, view);
+                        data = new QueryView(query, targetId, view);
                         this.queryViewsByQuery.set(query, data);
-                        this.queryViewsByTarget[queryData.targetId] = data;
+                        if (!this.queriesByTarget[targetId]) {
+                            this.queriesByTarget[targetId] = [];
+                        }
+                        this.queriesByTarget[targetId].push(query);
                         return [2 /*return*/, viewChange.snapshot];
                 }
             });
@@ -19238,7 +19796,7 @@ var SyncEngine = /** @class */ (function () {
     /** Stops listening to the query. */
     SyncEngine.prototype.unlisten = function (query) {
         return __awaiter(this, void 0, void 0, function () {
-            var queryView, targetRemainsActive;
+            var queryView, queries, targetRemainsActive;
             var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -19246,6 +19804,12 @@ var SyncEngine = /** @class */ (function () {
                         this.assertSubscribed('unlisten()');
                         queryView = this.queryViewsByQuery.get(query);
                         assert(!!queryView, 'Trying to unlisten on query not found:' + query);
+                        queries = this.queriesByTarget[queryView.targetId];
+                        if (queries.length > 1) {
+                            this.queriesByTarget[queryView.targetId] = queries.filter(function (q) { return !q.isEqual(query); });
+                            this.queryViewsByQuery.delete(query);
+                            return [2 /*return*/];
+                        }
                         if (!this.isPrimary) return [3 /*break*/, 3];
                         // We need to remove the local query target first to allow us to verify
                         // whether any other client is still interested in this target.
@@ -19253,11 +19817,11 @@ var SyncEngine = /** @class */ (function () {
                         targetRemainsActive = this.sharedClientState.isActiveQueryTarget(queryView.targetId);
                         if (!!targetRemainsActive) return [3 /*break*/, 2];
                         return [4 /*yield*/, this.localStore
-                                .releaseQuery(query, /*keepPersistedQueryData=*/ false)
+                                .releaseTarget(queryView.targetId, /*keepPersistedTargetData=*/ false)
                                 .then(function () {
                                 _this.sharedClientState.clearQueryState(queryView.targetId);
                                 _this.remoteStore.unlisten(queryView.targetId);
-                                _this.removeAndCleanupQuery(queryView);
+                                _this.removeAndCleanupTarget(queryView.targetId);
                             })
                                 .catch(ignoreIfPrimaryLeaseLoss)];
                     case 1:
@@ -19265,9 +19829,9 @@ var SyncEngine = /** @class */ (function () {
                         _a.label = 2;
                     case 2: return [3 /*break*/, 5];
                     case 3:
-                        this.removeAndCleanupQuery(queryView);
-                        return [4 /*yield*/, this.localStore.releaseQuery(query, 
-                            /*keepPersistedQueryData=*/ true)];
+                        this.removeAndCleanupTarget(queryView.targetId);
+                        return [4 /*yield*/, this.localStore.releaseTarget(queryView.targetId, 
+                            /*keepPersistedTargetData=*/ true)];
                     case 4:
                         _a.sent();
                         _a.label = 5;
@@ -19410,7 +19974,7 @@ var SyncEngine = /** @class */ (function () {
     };
     SyncEngine.prototype.rejectListen = function (targetId, err) {
         return __awaiter(this, void 0, void 0, function () {
-            var limboResolution, limboKey, documentUpdates, resolvedLimboDocuments, event_1, queryView_1;
+            var limboResolution, limboKey, documentUpdates, resolvedLimboDocuments, event_1;
             var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -19432,16 +19996,12 @@ var SyncEngine = /** @class */ (function () {
                         /* targetChanges= */ {}, 
                         /* targetMismatches= */ new SortedSet(primitiveComparator), documentUpdates, resolvedLimboDocuments);
                         return [2 /*return*/, this.applyRemoteEvent(event_1)];
-                    case 1:
-                        queryView_1 = this.queryViewsByTarget[targetId];
-                        assert(!!queryView_1, 'Unknown targetId: ' + targetId);
-                        return [4 /*yield*/, this.localStore
-                                .releaseQuery(queryView_1.query, /* keepPersistedQueryData */ false)
-                                .then(function () { return _this.removeAndCleanupQuery(queryView_1); })
-                                .catch(ignoreIfPrimaryLeaseLoss)];
+                    case 1: return [4 /*yield*/, this.localStore
+                            .releaseTarget(targetId, /* keepPersistedTargetData */ false)
+                            .then(function () { return _this.removeAndCleanupTarget(targetId, err); })
+                            .catch(ignoreIfPrimaryLeaseLoss)];
                     case 2:
                         _a.sent();
-                        this.syncEngineListener.onWatchError(queryView_1.query, err);
                         _a.label = 3;
                     case 3: return [2 /*return*/];
                 }
@@ -19651,14 +20211,23 @@ var SyncEngine = /** @class */ (function () {
             this.mutationUserCallbacks[this.currentUser.toKey()] = newCallbacks;
         }
     };
-    SyncEngine.prototype.removeAndCleanupQuery = function (queryView) {
+    SyncEngine.prototype.removeAndCleanupTarget = function (targetId, error) {
         var _this = this;
-        this.sharedClientState.removeLocalQueryTarget(queryView.targetId);
-        this.queryViewsByQuery.delete(queryView.query);
-        delete this.queryViewsByTarget[queryView.targetId];
+        if (error === void 0) { error = null; }
+        this.sharedClientState.removeLocalQueryTarget(targetId);
+        assert(this.queriesByTarget[targetId] &&
+            this.queriesByTarget[targetId].length !== 0, "There are no queries mapped to target id " + targetId);
+        for (var _i = 0, _a = this.queriesByTarget[targetId]; _i < _a.length; _i++) {
+            var query = _a[_i];
+            this.queryViewsByQuery.delete(query);
+            if (error) {
+                this.syncEngineListener.onWatchError(query, error);
+            }
+        }
+        delete this.queriesByTarget[targetId];
         if (this.isPrimary) {
-            var limboKeys = this.limboDocumentRefs.referencesForId(queryView.targetId);
-            this.limboDocumentRefs.removeReferencesForId(queryView.targetId);
+            var limboKeys = this.limboDocumentRefs.referencesForId(targetId);
+            this.limboDocumentRefs.removeReferencesForId(targetId);
             limboKeys.forEach(function (limboKey) {
                 var isReferenced = _this.limboDocumentRefs.containsKey(limboKey);
                 if (!isReferenced) {
@@ -19708,7 +20277,7 @@ var SyncEngine = /** @class */ (function () {
             var limboTargetId = this.limboTargetIdGenerator.next();
             var query = Query.atPath(key.path);
             this.limboResolutionsByTarget[limboTargetId] = new LimboResolution(key);
-            this.remoteStore.listen(new QueryData(query, limboTargetId, QueryPurpose.LimboResolution, ListenSequence.INVALID));
+            this.remoteStore.listen(new TargetData(query.toTarget(), limboTargetId, TargetPurpose.LimboResolution, ListenSequence.INVALID));
             this.limboTargetsByKey = this.limboTargetsByKey.insert(key, limboTargetId);
         }
     };
@@ -19804,7 +20373,7 @@ var SyncEngine = /** @class */ (function () {
     // PORTING NOTE: Multi-tab only
     SyncEngine.prototype.applyPrimaryState = function (isPrimary) {
         return __awaiter(this, void 0, void 0, function () {
-            var activeTargets, activeQueries, _i, activeQueries_1, queryData, activeTargets_1, p_1;
+            var activeTargets, activeQueries, _i, activeQueries_1, targetData, activeTargets_1, p_1;
             var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -19819,8 +20388,8 @@ var SyncEngine = /** @class */ (function () {
                     case 2:
                         activeQueries = _a.sent();
                         for (_i = 0, activeQueries_1 = activeQueries; _i < activeQueries_1.length; _i++) {
-                            queryData = activeQueries_1[_i];
-                            this.remoteStore.listen(queryData);
+                            targetData = activeQueries_1[_i];
+                            this.remoteStore.listen(targetData);
                         }
                         return [3 /*break*/, 7];
                     case 3:
@@ -19828,14 +20397,18 @@ var SyncEngine = /** @class */ (function () {
                         this.isPrimary = false;
                         activeTargets_1 = [];
                         p_1 = Promise.resolve();
-                        forEachNumber(this.queryViewsByTarget, function (targetId, queryView) {
+                        forEachNumber(this.queriesByTarget, function (targetId, _) {
                             if (_this.sharedClientState.isLocalQueryTarget(targetId)) {
                                 activeTargets_1.push(targetId);
                             }
                             else {
-                                p_1 = p_1.then(function () { return _this.unlisten(queryView.query); });
+                                p_1 = p_1.then(function () {
+                                    _this.removeAndCleanupTarget(targetId);
+                                    return _this.localStore.releaseTarget(targetId, 
+                                    /*keepPersistedTargetData=*/ true);
+                                });
                             }
-                            _this.remoteStore.unlisten(queryView.targetId);
+                            _this.remoteStore.unlisten(targetId);
                         });
                         return [4 /*yield*/, p_1];
                     case 4:
@@ -19871,68 +20444,93 @@ var SyncEngine = /** @class */ (function () {
     // PORTING NOTE: Multi-tab only.
     SyncEngine.prototype.synchronizeQueryViewsAndRaiseSnapshots = function (targets) {
         return __awaiter(this, void 0, void 0, function () {
-            var activeQueries, newViewSnapshots, _i, targets_1, targetId, queryData, queryView, viewChange, query;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var activeQueries, newViewSnapshots, _i, targets_1, targetId, targetData, queries, _a, queries_1, query, queryView, viewChange, target;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
                         activeQueries = [];
                         newViewSnapshots = [];
                         _i = 0, targets_1 = targets;
-                        _a.label = 1;
+                        _b.label = 1;
                     case 1:
-                        if (!(_i < targets_1.length)) return [3 /*break*/, 11];
+                        if (!(_i < targets_1.length)) return [3 /*break*/, 14];
                         targetId = targets_1[_i];
-                        queryData = void 0;
-                        queryView = this.queryViewsByTarget[targetId];
-                        if (!queryView) return [3 /*break*/, 5];
+                        targetData = void 0;
+                        queries = this.queriesByTarget[targetId];
+                        if (!(queries && queries.length !== 0)) return [3 /*break*/, 8];
                         // For queries that have a local View, we need to update their state
                         // in LocalStore (as the resume token and the snapshot version
                         // might have changed) and reconcile their views with the persisted
                         // state (the list of syncedDocuments may have gotten out of sync).
-                        return [4 /*yield*/, this.localStore.releaseQuery(queryView.query, 
-                            /*keepPersistedQueryData=*/ true)];
+                        return [4 /*yield*/, this.localStore.releaseTarget(targetId, 
+                            /*keepPersistedTargetData=*/ true)];
                     case 2:
                         // For queries that have a local View, we need to update their state
                         // in LocalStore (as the resume token and the snapshot version
                         // might have changed) and reconcile their views with the persisted
                         // state (the list of syncedDocuments may have gotten out of sync).
-                        _a.sent();
-                        return [4 /*yield*/, this.localStore.allocateQuery(queryView.query)];
+                        _b.sent();
+                        return [4 /*yield*/, this.localStore.allocateTarget(queries[0].toTarget())];
                     case 3:
-                        queryData = _a.sent();
-                        return [4 /*yield*/, this.synchronizeViewAndComputeSnapshot(queryView)];
+                        targetData = _b.sent();
+                        _a = 0, queries_1 = queries;
+                        _b.label = 4;
                     case 4:
-                        viewChange = _a.sent();
+                        if (!(_a < queries_1.length)) return [3 /*break*/, 7];
+                        query = queries_1[_a];
+                        queryView = this.queryViewsByQuery.get(query);
+                        assert(!!queryView, "No query view found for " + query);
+                        return [4 /*yield*/, this.synchronizeViewAndComputeSnapshot(queryView)];
+                    case 5:
+                        viewChange = _b.sent();
                         if (viewChange.snapshot) {
                             newViewSnapshots.push(viewChange.snapshot);
                         }
-                        return [3 /*break*/, 9];
-                    case 5:
-                        assert(this.isPrimary === true, 'A secondary tab should never have an active query without an active view.');
-                        return [4 /*yield*/, this.localStore.getQueryForTarget(targetId)];
+                        _b.label = 6;
                     case 6:
-                        query = _a.sent();
-                        assert(!!query, "Query data for target " + targetId + " not found");
-                        return [4 /*yield*/, this.localStore.allocateQuery(query)];
-                    case 7:
-                        queryData = _a.sent();
-                        return [4 /*yield*/, this.initializeViewAndComputeSnapshot(queryData, 
-                            /*current=*/ false)];
+                        _a++;
+                        return [3 /*break*/, 4];
+                    case 7: return [3 /*break*/, 12];
                     case 8:
-                        _a.sent();
-                        _a.label = 9;
+                        assert(this.isPrimary === true, 'A secondary tab should never have an active target without an active query.');
+                        return [4 /*yield*/, this.localStore.getTarget(targetId)];
                     case 9:
-                        activeQueries.push(queryData);
-                        _a.label = 10;
+                        target = _b.sent();
+                        assert(!!target, "Target for id " + targetId + " not found");
+                        return [4 /*yield*/, this.localStore.allocateTarget(target)];
                     case 10:
+                        targetData = _b.sent();
+                        return [4 /*yield*/, this.initializeViewAndComputeSnapshot(this.synthesizeTargetToQuery(target), targetId, 
+                            /*current=*/ false)];
+                    case 11:
+                        _b.sent();
+                        _b.label = 12;
+                    case 12:
+                        activeQueries.push(targetData);
+                        _b.label = 13;
+                    case 13:
                         _i++;
                         return [3 /*break*/, 1];
-                    case 11:
+                    case 14:
                         this.syncEngineListener.onWatchChange(newViewSnapshots);
                         return [2 /*return*/, activeQueries];
                 }
             });
         });
+    };
+    /**
+     * Creates a `Query` object from the specified `Target`. There is no way to
+     * obtain the original `Query`, so we synthesize a `Query` from the `Target`
+     * object.
+     *
+     * The synthesized result might be different from the original `Query`, but
+     * since the synthesized `Query` should return the same results as the
+     * original one (only the presentation of results might differ), the potential
+     * difference will not cause issues.
+     */
+    // PORTING NOTE: Multi-tab only
+    SyncEngine.prototype.synthesizeTargetToQuery = function (target) {
+        return new Query(target.path, target.collectionGroup, target.orderBy, target.filters, target.limit, LimitType.First, target.startAt, target.endAt);
     };
     // PORTING NOTE: Multi-tab only
     SyncEngine.prototype.getActiveClients = function () {
@@ -19941,7 +20539,7 @@ var SyncEngine = /** @class */ (function () {
     // PORTING NOTE: Multi-tab only
     SyncEngine.prototype.applyTargetState = function (targetId, state, error) {
         return __awaiter(this, void 0, void 0, function () {
-            var _a, changes, synthesizedRemoteEvent, queryView;
+            var _a, changes, synthesizedRemoteEvent;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -19951,7 +20549,7 @@ var SyncEngine = /** @class */ (function () {
                             debug(LOG_TAG$9, 'Ignoring unexpected query state notification.');
                             return [2 /*return*/];
                         }
-                        if (!this.queryViewsByTarget[targetId]) return [3 /*break*/, 7];
+                        if (!this.queriesByTarget[targetId]) return [3 /*break*/, 7];
                         _a = state;
                         switch (_a) {
                             case 'current': return [3 /*break*/, 1];
@@ -19967,14 +20565,11 @@ var SyncEngine = /** @class */ (function () {
                     case 3:
                         _b.sent();
                         return [3 /*break*/, 7];
-                    case 4:
-                        queryView = this.queryViewsByTarget[targetId];
-                        this.removeAndCleanupQuery(queryView);
-                        return [4 /*yield*/, this.localStore.releaseQuery(queryView.query, 
-                            /*keepPersistedQueryData=*/ true)];
+                    case 4: return [4 /*yield*/, this.localStore.releaseTarget(targetId, 
+                        /* keepPersistedTargetData */ true)];
                     case 5:
                         _b.sent();
-                        this.syncEngineListener.onWatchError(queryView.query, error);
+                        this.removeAndCleanupTarget(targetId, error);
                         return [3 /*break*/, 7];
                     case 6:
                         fail('Unexpected target state: ' + state);
@@ -19987,7 +20582,7 @@ var SyncEngine = /** @class */ (function () {
     // PORTING NOTE: Multi-tab only
     SyncEngine.prototype.applyActiveTargetsChange = function (added, removed) {
         return __awaiter(this, void 0, void 0, function () {
-            var _i, added_1, targetId, query, queryData, _loop_1, this_1, _a, removed_1, targetId;
+            var _i, added_1, targetId, target, targetData, _loop_1, this_1, _a, removed_1, targetId;
             var _this = this;
             return __generator(this, function (_b) {
                 switch (_b.label) {
@@ -20000,42 +20595,45 @@ var SyncEngine = /** @class */ (function () {
                     case 1:
                         if (!(_i < added_1.length)) return [3 /*break*/, 6];
                         targetId = added_1[_i];
-                        assert(!this.queryViewsByTarget[targetId], 'Trying to add an already active target');
-                        return [4 /*yield*/, this.localStore.getQueryForTarget(targetId)];
+                        assert(!this.queriesByTarget[targetId], 'Trying to add an already active target');
+                        return [4 /*yield*/, this.localStore.getTarget(targetId)];
                     case 2:
-                        query = _b.sent();
-                        assert(!!query, "Query data for active target " + targetId + " not found");
-                        return [4 /*yield*/, this.localStore.allocateQuery(query)];
+                        target = _b.sent();
+                        assert(!!target, "Query data for active target " + targetId + " not found");
+                        return [4 /*yield*/, this.localStore.allocateTarget(target)];
                     case 3:
-                        queryData = _b.sent();
-                        return [4 /*yield*/, this.initializeViewAndComputeSnapshot(queryData, 
+                        targetData = _b.sent();
+                        return [4 /*yield*/, this.initializeViewAndComputeSnapshot(this.synthesizeTargetToQuery(target), targetData.targetId, 
                             /*current=*/ false)];
                     case 4:
                         _b.sent();
-                        this.remoteStore.listen(queryData);
+                        this.remoteStore.listen(targetData);
                         _b.label = 5;
                     case 5:
                         _i++;
                         return [3 /*break*/, 1];
                     case 6:
                         _loop_1 = function (targetId) {
-                            var queryView;
                             return __generator(this, function (_a) {
                                 switch (_a.label) {
                                     case 0:
-                                        queryView = this_1.queryViewsByTarget[targetId];
-                                        if (!queryView) return [3 /*break*/, 2];
+                                        // Check that the target is still active since the target might have been
+                                        // removed if it has been rejected by the backend.
+                                        if (!this_1.queriesByTarget[targetId]) {
+                                            return [2 /*return*/, "continue"];
+                                        }
+                                        // Release queries that are still active.
                                         return [4 /*yield*/, this_1.localStore
-                                                .releaseQuery(queryView.query, /*keepPersistedQueryData=*/ false)
+                                                .releaseTarget(targetId, /* keepPersistedTargetData */ false)
                                                 .then(function () {
                                                 _this.remoteStore.unlisten(targetId);
-                                                _this.removeAndCleanupQuery(queryView);
+                                                _this.removeAndCleanupTarget(targetId);
                                             })
                                                 .catch(ignoreIfPrimaryLeaseLoss)];
                                     case 1:
+                                        // Release queries that are still active.
                                         _a.sent();
-                                        _a.label = 2;
-                                    case 2: return [2 /*return*/];
+                                        return [2 /*return*/];
                                 }
                             });
                         };
@@ -20075,9 +20673,18 @@ var SyncEngine = /** @class */ (function () {
             return documentKeySet().add(limboResolution.key);
         }
         else {
-            return this.queryViewsByTarget[targetId]
-                ? this.queryViewsByTarget[targetId].view.syncedDocuments
-                : documentKeySet();
+            var keySet = documentKeySet();
+            var queries = this.queriesByTarget[targetId];
+            if (!queries) {
+                return keySet;
+            }
+            for (var _i = 0, queries_2 = queries; _i < queries_2.length; _i++) {
+                var query = queries_2[_i];
+                var queryView = this.queryViewsByQuery.get(query);
+                assert(!!queryView, "No query view found for " + query);
+                keySet = keySet.unionWith(queryView.view.syncedDocuments);
+            }
+            return keySet;
         }
     };
     return SyncEngine;
@@ -20360,7 +20967,6 @@ var LocalClientState = /** @class */ (function () {
         this.activeTargetIds = targetIdSet();
     }
     LocalClientState.prototype.addQueryTarget = function (targetId) {
-        assert(!this.activeTargetIds.has(targetId), "Target with ID '" + targetId + "' already active.");
         this.activeTargetIds = this.activeTargetIds.add(targetId);
     };
     LocalClientState.prototype.removeQueryTarget = function (targetId) {
@@ -20960,14 +21566,14 @@ var FirestoreClient = /** @class */ (function () {
         //
         // If initializationDone resolved then the FirestoreClient is in a usable
         // state.
-        var initializationDone = new Deferred();
+        var initializationDone = new Deferred$1();
         // If usePersistence is true, certain classes of errors while starting are
         // recoverable but only by falling back to persistence disabled.
         //
         // If there's an error in the first case but not in recovery we cannot
         // reject the promise blocking the async queue because this will cause the
         // async queue to panic.
-        var persistenceResult = new Deferred();
+        var persistenceResult = new Deferred$1();
         var initialized = false;
         this.credentials.setChangeListener(function (user) {
             if (!initialized) {
@@ -21157,7 +21763,7 @@ var FirestoreClient = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        queryEngine = new SimpleQueryEngine();
+                        queryEngine = new IndexFreeQueryEngine();
                         this.localStore = new LocalStore(this.persistence, queryEngine, user);
                         return [4 /*yield*/, this.localStore.start()];
                     case 1:
@@ -21284,7 +21890,7 @@ var FirestoreClient = /** @class */ (function () {
     FirestoreClient.prototype.waitForPendingWrites = function () {
         var _this = this;
         this.verifyNotTerminated();
-        var deferred = new Deferred();
+        var deferred = new Deferred$1();
         this.asyncQueue.enqueueAndForget(function () {
             return _this.syncEngine.registerPendingWritesCallback(deferred);
         });
@@ -21354,7 +21960,7 @@ var FirestoreClient = /** @class */ (function () {
     FirestoreClient.prototype.write = function (mutations) {
         var _this = this;
         this.verifyNotTerminated();
-        var deferred = new Deferred();
+        var deferred = new Deferred$1();
         this.asyncQueue.enqueueAndForget(function () {
             return _this.syncEngine.write(mutations, deferred);
         });
@@ -21392,7 +21998,7 @@ var FirestoreClient = /** @class */ (function () {
     FirestoreClient.prototype.transaction = function (updateFunction) {
         var _this = this;
         this.verifyNotTerminated();
-        var deferred = new Deferred();
+        var deferred = new Deferred$1();
         this.asyncQueue.enqueueAndForget(function () {
             _this.syncEngine.runTransaction(_this.asyncQueue, updateFunction, deferred);
             return Promise.resolve();
@@ -21591,9 +22197,8 @@ var EmptyCredentialsProvider = /** @class */ (function () {
     return EmptyCredentialsProvider;
 }());
 var FirebaseCredentialsProvider = /** @class */ (function () {
-    function FirebaseCredentialsProvider(app) {
+    function FirebaseCredentialsProvider(authProvider) {
         var _this = this;
-        this.app = app;
         /**
          * The auth token listener registered with FirebaseApp, retained here so we
          * can unregister it.
@@ -21601,6 +22206,7 @@ var FirebaseCredentialsProvider = /** @class */ (function () {
         this.tokenListener = null;
         /** Tracks the current User. */
         this.currentUser = User.UNAUTHENTICATED;
+        this.receivedInitialUser = false;
         /**
          * Counter used to detect if the token changed while a getToken request was
          * outstanding.
@@ -21612,14 +22218,29 @@ var FirebaseCredentialsProvider = /** @class */ (function () {
         this.tokenListener = function () {
             _this.tokenCounter++;
             _this.currentUser = _this.getUser();
+            _this.receivedInitialUser = true;
             if (_this.changeListener) {
                 _this.changeListener(_this.currentUser);
             }
         };
-        this.currentUser = this.getUser();
         this.tokenCounter = 0;
-        // Will fire at least once where we set this.currentUser
-        this.app.INTERNAL.addAuthTokenListener(this.tokenListener);
+        this.auth = authProvider.getImmediate({ optional: true });
+        if (this.auth) {
+            this.auth.addAuthTokenListener(this.tokenListener);
+        }
+        else {
+            // if auth is not available, invoke tokenListener once with null token
+            this.tokenListener(null);
+            authProvider.get().then(function (auth) {
+                _this.auth = auth;
+                if (_this.tokenListener) {
+                    // tokenListener can be removed by removeChangeListener()
+                    _this.auth.addAuthTokenListener(_this.tokenListener);
+                }
+            }, function () {
+                /* this.authProvider.get() never rejects */
+            });
+        }
     }
     FirebaseCredentialsProvider.prototype.getToken = function () {
         var _this = this;
@@ -21630,7 +22251,10 @@ var FirebaseCredentialsProvider = /** @class */ (function () {
         var initialTokenCounter = this.tokenCounter;
         var forceRefresh = this.forceRefresh;
         this.forceRefresh = false;
-        return this.app.INTERNAL.getToken(forceRefresh).then(function (tokenData) {
+        if (!this.auth) {
+            return Promise.resolve(null);
+        }
+        return this.auth.getToken(forceRefresh).then(function (tokenData) {
             // Cancel the request since the token changed while the request was
             // outstanding so the response is potentially for a previous user (which
             // user, we can't be sure).
@@ -21655,17 +22279,25 @@ var FirebaseCredentialsProvider = /** @class */ (function () {
         assert(!this.changeListener, 'Can only call setChangeListener() once.');
         this.changeListener = changeListener;
         // Fire the initial event
-        changeListener(this.currentUser);
+        if (this.receivedInitialUser) {
+            changeListener(this.currentUser);
+        }
     };
     FirebaseCredentialsProvider.prototype.removeChangeListener = function () {
         assert(this.tokenListener != null, 'removeChangeListener() called twice');
         assert(this.changeListener !== null, 'removeChangeListener() called when no listener registered');
-        this.app.INTERNAL.removeAuthTokenListener(this.tokenListener);
+        if (this.auth) {
+            this.auth.removeAuthTokenListener(this.tokenListener);
+        }
         this.tokenListener = null;
         this.changeListener = null;
     };
+    // Auth.getUid() can return null even with a user logged in. It is because
+    // getUid() is synchronous, but the auth code populating Uid is asynchronous.
+    // This method should only be called in the AuthTokenListener callback
+    // to guarantee to get the actual user.
     FirebaseCredentialsProvider.prototype.getUser = function () {
-        var currentUid = this.app.INTERNAL.getUid();
+        var currentUid = this.auth && this.auth.getUid();
         assert(currentUid === null || typeof currentUid === 'string', 'Received invalid UID: ' + currentUid);
         return new User(currentUid);
     };
@@ -21971,6 +22603,11 @@ var UserDataSource;
      * element, etc. Of note, isWrite(source) will return false.
      */
     UserDataSource[UserDataSource["Argument"] = 3] = "Argument";
+    /**
+     * Indicates that the source is an Argument that may directly contain nested
+     * arrays (e.g. the operand of an `in` query).
+     */
+    UserDataSource[UserDataSource["ArrayArgument"] = 4] = "ArrayArgument";
 })(UserDataSource || (UserDataSource = {}));
 function isWrite(dataSource) {
     switch (dataSource) {
@@ -21979,6 +22616,7 @@ function isWrite(dataSource) {
         case UserDataSource.Update:
             return true;
         case UserDataSource.Argument:
+        case UserDataSource.ArrayArgument:
             return false;
         default:
             throw fail("Unexpected case for UserDataSource: " + dataSource);
@@ -22069,8 +22707,11 @@ var ParseContext = /** @class */ (function () {
         }
     };
     ParseContext.prototype.validatePathSegment = function (segment) {
+        if (segment.length === 0) {
+            throw this.createError('Document fields must not be empty');
+        }
         if (isWrite(this.dataSource) && RESERVED_FIELD_REGEX.test(segment)) {
-            throw this.createError('Document fields cannot begin and end with __');
+            throw this.createError('Document fields cannot begin and end with "__"');
         }
     };
     return ParseContext;
@@ -22203,9 +22844,13 @@ var UserDataConverter = /** @class */ (function () {
     /**
      * Parse a "query value" (e.g. value in a where filter or a value in a cursor
      * bound).
+     *
+     * @param allowArrays Whether the query value is an array that may directly
+     * contain additional arrays (e.g. the operand of an `in` query).
      */
-    UserDataConverter.prototype.parseQueryValue = function (methodName, input) {
-        var context = new ParseContext(UserDataSource.Argument, methodName, FieldPath.EMPTY_PATH);
+    UserDataConverter.prototype.parseQueryValue = function (methodName, input, allowArrays) {
+        if (allowArrays === void 0) { allowArrays = false; }
+        var context = new ParseContext(allowArrays ? UserDataSource.ArrayArgument : UserDataSource.Argument, methodName, FieldPath.EMPTY_PATH);
         var parsed = this.parseData(input, context);
         assert(parsed != null, 'Parsed data should not be null.');
         assert(context.fieldTransforms.length === 0, 'Field transforms should have been disallowed.');
@@ -22254,7 +22899,12 @@ var UserDataConverter = /** @class */ (function () {
             if (input instanceof Array) {
                 // TODO(b/34871131): Include the path containing the array in the error
                 // message.
-                if (context.arrayElement) {
+                // In the case of IN queries, the parsed data is an array (representing
+                // the set of values to be included for the IN query) that may directly
+                // contain additional arrays (each representing an individual field
+                // value), so we disable this validation.
+                if (context.arrayElement &&
+                    context.dataSource !== UserDataSource.ArrayArgument) {
                     throw context.createError('Nested arrays are not supported');
                 }
                 return this.parseArray(input, context);
@@ -22580,7 +23230,7 @@ var FirestoreSettings = /** @class */ (function () {
  * The root reference to the database.
  */
 var Firestore = /** @class */ (function () {
-    function Firestore(databaseIdOrApp) {
+    function Firestore(databaseIdOrApp, authProvider) {
         var _this = this;
         this._firebaseApp = null;
         // Public for use in tests.
@@ -22609,7 +23259,7 @@ var Firestore = /** @class */ (function () {
             this._firebaseApp = app;
             this._databaseId = Firestore.databaseIdFromApp(app);
             this._persistenceKey = app.name;
-            this._credentials = new FirebaseCredentialsProvider(app);
+            this._credentials = new FirebaseCredentialsProvider(authProvider);
         }
         else {
             var external_1 = databaseIdOrApp;
@@ -22673,7 +23323,7 @@ var Firestore = /** @class */ (function () {
     Firestore.prototype.clearPersistence = function () {
         var _this = this;
         var persistenceKey = IndexedDbPersistence.buildStoragePrefix(this.makeDatabaseInfo());
-        var deferred = new Deferred();
+        var deferred = new Deferred$1();
         this._queue.enqueueAndForgetEvenAfterShutdown(function () { return __awaiter(_this, void 0, void 0, function () {
             var e_1;
             return __generator(this, function (_a) {
@@ -23359,13 +24009,18 @@ var Query$1 = /** @class */ (function () {
     Query.prototype.where = function (field, opStr, value) {
         validateExactNumberOfArgs('Query.where', arguments, 3);
         validateDefined('Query.where', 3, value);
-        // TODO(in-queries): Add 'in' and 'array-contains-any' to validation.
-        if (opStr !== 'in' &&
-            opStr !== 'array-contains-any') {
-            // Enumerated from the WhereFilterOp type in index.d.ts.
-            var whereFilterOpEnums = ['<', '<=', '==', '>=', '>', 'array-contains'];
-            validateStringEnum('Query.where', whereFilterOpEnums, 2, opStr);
-        }
+        // Enumerated from the WhereFilterOp type in index.d.ts.
+        var whereFilterOpEnums = [
+            '<',
+            '<=',
+            '==',
+            '>=',
+            '>',
+            'array-contains',
+            'in',
+            'array-contains-any'
+        ];
+        validateStringEnum('Query.where', whereFilterOpEnums, 2, opStr);
         var fieldValue;
         var fieldPath = fieldPathFromArgument('Query.where', field);
         var operator = Operator.fromString(opStr);
@@ -23393,7 +24048,9 @@ var Query$1 = /** @class */ (function () {
                 operator === Operator.ARRAY_CONTAINS_ANY) {
                 this.validateDisjunctiveFilterElements(value, operator);
             }
-            fieldValue = this.firestore._dataConverter.parseQueryValue('Query.where', value);
+            fieldValue = this.firestore._dataConverter.parseQueryValue('Query.where', value, 
+            // We only allow nested arrays for IN queries.
+            /** allowArrays = */ operator === Operator.IN ? true : false);
         }
         var filter = FieldFilter.create(fieldPath, operator, fieldValue);
         this.validateNewFilter(filter);
@@ -23429,11 +24086,14 @@ var Query$1 = /** @class */ (function () {
     Query.prototype.limit = function (n) {
         validateExactNumberOfArgs('Query.limit', arguments, 1);
         validateArgType('Query.limit', 'number', 1, n);
-        if (n <= 0) {
-            throw new FirestoreError(Code.INVALID_ARGUMENT, "Invalid Query. Query limit (" + n + ") is invalid. Limit must be " +
-                'positive.');
-        }
-        return new Query(this._query.withLimit(n), this.firestore);
+        validatePositiveNumber('Query.limit', 1, n);
+        return new Query(this._query.withLimitToFirst(n), this.firestore);
+    };
+    Query.prototype.limitToLast = function (n) {
+        validateExactNumberOfArgs('Query.limitToLast', arguments, 1);
+        validateArgType('Query.limitToLast', 'number', 1, n);
+        validatePositiveNumber('Query.limitToLast', 1, n);
+        return new Query(this._query.withLimitToLast(n), this.firestore);
     };
     Query.prototype.startAt = function (docOrField) {
         var fields = [];
@@ -23621,6 +24281,7 @@ var Query$1 = /** @class */ (function () {
                 complete: args[currArg + 2]
             };
         }
+        this.validateHasExplicitOrderByForLimitToLast(this._query);
         return this.onSnapshotInternal(options, observer);
     };
     Query.prototype.onSnapshotInternal = function (options, observer) {
@@ -23646,10 +24307,16 @@ var Query$1 = /** @class */ (function () {
             firestoreClient.unlisten(internalListener);
         };
     };
+    Query.prototype.validateHasExplicitOrderByForLimitToLast = function (query) {
+        if (query.hasLimitToLast() && query.explicitOrderBy.length === 0) {
+            throw new FirestoreError(Code.UNIMPLEMENTED, 'limitToLast() queries require specifying at least one orderBy() clause');
+        }
+    };
     Query.prototype.get = function (options) {
         var _this = this;
         validateBetweenNumberOfArgs('Query.get', arguments, 0, 1);
         validateGetOptions('Query.get', options);
+        this.validateHasExplicitOrderByForLimitToLast(this._query);
         return new Promise(function (resolve, reject) {
             if (options && options.source === 'cache') {
                 _this.firestore
@@ -24134,7 +24801,10 @@ var firestoreNamespace = {
  * Configures Firestore as part of the Firebase SDK by calling registerService.
  */
 function configureForFirebase(firebase) {
-    firebase.INTERNAL.registerService('firestore', function (app) { return new Firestore(app); }, shallowCopy(firestoreNamespace));
+    firebase.INTERNAL.registerComponent(new Component('firestore', function (container) {
+        var app = container.getProvider('app').getImmediate();
+        return new Firestore(app, container.getProvider('auth-internal'));
+    }, "PUBLIC" /* PUBLIC */).setServiceProps(shallowCopy(firestoreNamespace)));
 }
 
 /**
@@ -24598,15 +25268,15 @@ var WebChannelConnection = /** @class */ (function () {
     WebChannelConnection.prototype.makeUrl = function (rpcName) {
         var urlRpcName = RPC_NAME_REST_MAPPING[rpcName];
         assert(urlRpcName !== undefined, 'Unknown REST mapping for: ' + rpcName);
-        var url = [this.baseUrl, '/', RPC_URL_VERSION];
-        url.push('/projects/');
-        url.push(this.databaseId.projectId);
-        url.push('/databases/');
-        url.push(this.databaseId.database);
-        url.push('/documents');
-        url.push(':');
-        url.push(urlRpcName);
-        return url.join('');
+        return (this.baseUrl +
+            '/' +
+            RPC_URL_VERSION +
+            '/projects/' +
+            this.databaseId.projectId +
+            '/databases/' +
+            this.databaseId.database +
+            '/documents:' +
+            urlRpcName);
     };
     return WebChannelConnection;
 }());
@@ -24716,7 +25386,7 @@ PlatformSupport.setPlatform(new BrowserPlatform());
 function registerFirestore(instance) {
     configureForFirebase(instance);
 }
-registerFirestore(firebase);
+registerFirestore(firebase$1);
 //# sourceMappingURL=index.esm.js.map
 
 /**
@@ -24819,6 +25489,7 @@ function codeForHTTPStatus(status) {
         case 504:
             return 'deadline-exceeded';
     }
+    return 'unknown';
 }
 /**
  * Takes an HTTP response and returns the corresponding Error, if any.
@@ -24869,8 +25540,24 @@ function _errorForResponse(status, bodyJSON, serializer) {
  * Helper class to get metadata that should be included with a function call.
  */
 var ContextProvider = /** @class */ (function () {
-    function ContextProvider(app) {
-        this.app = app;
+    function ContextProvider(authProvider, messagingProvider) {
+        var _this = this;
+        this.auth = null;
+        this.messaging = null;
+        this.auth = authProvider.getImmediate({ optional: true });
+        this.messaging = messagingProvider.getImmediate({
+            optional: true
+        });
+        if (!this.auth) {
+            authProvider.get().then(function (auth) { return (_this.auth = auth); }, function () {
+                /* get() never rejects */
+            });
+        }
+        if (!this.messaging) {
+            messagingProvider.get().then(function (messaging) { return (_this.messaging = messaging); }, function () {
+                /* get() never rejects */
+            });
+        }
     }
     ContextProvider.prototype.getAuthToken = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -24878,38 +25565,39 @@ var ContextProvider = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, this.app.INTERNAL.getToken()];
+                        if (!this.auth) {
+                            return [2 /*return*/, undefined];
+                        }
+                        _a.label = 1;
                     case 1:
+                        _a.trys.push([1, 3, , 4]);
+                        return [4 /*yield*/, this.auth.getToken()];
+                    case 2:
                         token = _a.sent();
                         if (!token) {
                             return [2 /*return*/, undefined];
                         }
                         return [2 /*return*/, token.accessToken];
-                    case 2:
+                    case 3:
                         e_1 = _a.sent();
                         // If there's any error when trying to get the auth token, leave it off.
                         return [2 /*return*/, undefined];
-                    case 3: return [2 /*return*/];
+                    case 4: return [2 /*return*/];
                 }
             });
         });
     };
     ContextProvider.prototype.getInstanceIdToken = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var messaging, token, e_2;
+            var token, e_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        // HACK: Until we have a separate instanceId package, this is a quick way
-                        // to load in the messaging instance for this app.
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        if (!this.app.messaging) {
+                        if (!this.messaging) {
                             return [2 /*return*/, undefined];
                         }
-                        messaging = this.app.messaging();
-                        return [4 /*yield*/, messaging.getToken()];
+                        return [4 /*yield*/, this.messaging.getToken()];
                     case 1:
                         token = _a.sent();
                         if (!token) {
@@ -25085,7 +25773,7 @@ var Service = /** @class */ (function () {
      * @param app_ The FirebaseApp to use.
      * @param region_ The region to call functions in.
      */
-    function Service(app_, region_) {
+    function Service(app_, authProvider, messagingProvider, region_) {
         var _this = this;
         if (region_ === void 0) { region_ = 'us-central1'; }
         this.app_ = app_;
@@ -25097,7 +25785,7 @@ var Service = /** @class */ (function () {
                 return _this.deleteService();
             }
         };
-        this.contextProvider = new ContextProvider(app_);
+        this.contextProvider = new ContextProvider(authProvider, messagingProvider);
         // Cancels all ongoing requests when resolved.
         this.cancelAllRequests = new Promise(function (resolve) {
             _this.deleteService = function () {
@@ -25265,7 +25953,7 @@ var Service = /** @class */ (function () {
 
 /**
  * @license
- * Copyright 2017 Google Inc.
+ * Copyright 2019 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25283,21 +25971,41 @@ var Service = /** @class */ (function () {
  * Type constant for Firebase Functions.
  */
 var FUNCTIONS_TYPE = 'functions';
-function factory(app, _unused, region) {
-    return new Service(app, region);
+function factory(container, region) {
+    // Dependencies
+    var app = container.getProvider('app').getImmediate();
+    var authProvider = container.getProvider('auth-internal');
+    var messagingProvider = container.getProvider('messaging');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new Service(app, authProvider, messagingProvider, region);
 }
 function registerFunctions(instance) {
     var namespaceExports = {
         // no-inline
         Functions: Service
     };
-    instance.INTERNAL.registerService(FUNCTIONS_TYPE, factory, namespaceExports, 
-    // We don't need to wait on any AppHooks.
-    undefined, 
-    // Allow multiple functions instances per app.
-    true);
+    instance.INTERNAL.registerComponent(new Component(FUNCTIONS_TYPE, factory, "PUBLIC" /* PUBLIC */)
+        .setServiceProps(namespaceExports)
+        .setMultipleInstances(true));
 }
-registerFunctions(firebase);
+
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+registerFunctions(firebase$1);
 //# sourceMappingURL=index.esm.js.map
 
 /*!
@@ -37294,26 +38002,10 @@ function getOuterHTML (el) {
 
 Vue.compile = compileToFunctions;
 
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
+const filterAll = 'all';
+const filterMy = 'my';
+const adminEmails = ['alina.karpelceva@shopify.com', 'marius.beliauskas@shopify.com'];
+
 //
 
 var script = {
@@ -37321,6 +38013,20 @@ var script = {
     isLoggedIn: Boolean,
     hasCorrectDomain: Boolean,
     email: String,
+    updateFilter: Function,
+    filter: String,
+    userChannel: String,
+  },
+  data() {
+    return {
+      filterAll,
+      filterMy,
+    };
+  },
+  computed: {
+    isAdminEmail() {
+        return adminEmails.includes(this.email);
+    }
   },
   methods: {
     onLoginClick() {
@@ -37328,6 +38034,12 @@ var script = {
     },
     onLogoutClick() {
       this.$root.$emit('logout');
+    },
+    onInput(value) {
+      this.$emit('updateFilter', value);
+    },
+    refreshSeating() {
+      this.$root.$emit('refreshSeating');
     },
   },
 };
@@ -37409,6 +38121,56 @@ function normalizeComponent(template, style, script, scopeId, isFunctionalTempla
 
 const isOldIE = typeof navigator !== 'undefined' &&
     /msie [6-9]\\b/.test(navigator.userAgent.toLowerCase());
+function createInjector(context) {
+    return (id, style) => addStyle(id, style);
+}
+let HEAD;
+const styles = {};
+function addStyle(id, css) {
+    const group = isOldIE ? css.media || 'default' : id;
+    const style = styles[group] || (styles[group] = { ids: new Set(), styles: [] });
+    if (!style.ids.has(id)) {
+        style.ids.add(id);
+        let code = css.source;
+        if (css.map) {
+            // https://developer.chrome.com/devtools/docs/javascript-debugging
+            // this makes source maps inside style tags work properly in Chrome
+            code += '\n/*# sourceURL=' + css.map.sources[0] + ' */';
+            // http://stackoverflow.com/a/26603875
+            code +=
+                '\n/*# sourceMappingURL=data:application/json;base64,' +
+                    btoa(unescape(encodeURIComponent(JSON.stringify(css.map)))) +
+                    ' */';
+        }
+        if (!style.element) {
+            style.element = document.createElement('style');
+            style.element.type = 'text/css';
+            if (css.media)
+                style.element.setAttribute('media', css.media);
+            if (HEAD === undefined) {
+                HEAD = document.head || document.getElementsByTagName('head')[0];
+            }
+            HEAD.appendChild(style.element);
+        }
+        if ('styleSheet' in style.element) {
+            style.styles.push(code);
+            style.element.styleSheet.cssText = style.styles
+                .filter(Boolean)
+                .join('\n');
+        }
+        else {
+            const index = style.ids.size - 1;
+            const textNode = document.createTextNode(code);
+            const nodes = style.element.childNodes;
+            if (nodes[index])
+                style.element.removeChild(nodes[index]);
+            if (nodes.length)
+                style.element.insertBefore(textNode, nodes[index]);
+            else
+                style.element.appendChild(textNode);
+        }
+    }
+}
 //# sourceMappingURL=index.mjs.map
 
 /* script */
@@ -37446,6 +38208,60 @@ var __vue_render__ = function() {
               ])
             : _vm._e(),
           _vm._v(" "),
+          _vm.userChannel !== "no_channel"
+            ? _c("div", { staticClass: "Polaris-Stack__Item" }, [
+                _c("input", {
+                  staticClass: "hidden",
+                  attrs: {
+                    id: _vm.filterMy,
+                    type: "radio",
+                    name: "filter",
+                    value: "my"
+                  },
+                  on: {
+                    input: function($event) {
+                      return _vm.onInput(_vm.filterMy)
+                    }
+                  }
+                }),
+                _vm._v(" "),
+                _c(
+                  "label",
+                  {
+                    class: { active: _vm.filter === _vm.filterMy },
+                    attrs: { for: _vm.filterMy }
+                  },
+                  [_vm._v("My channel")]
+                )
+              ])
+            : _vm._e(),
+          _vm._v(" "),
+          _c("div", { staticClass: "Polaris-Stack__Item" }, [
+            _c("input", {
+              staticClass: "hidden",
+              attrs: {
+                id: _vm.filterAll,
+                type: "radio",
+                name: "filter",
+                value: "all"
+              },
+              on: {
+                input: function($event) {
+                  return _vm.onInput(_vm.filterAll)
+                }
+              }
+            }),
+            _vm._v(" "),
+            _c(
+              "label",
+              {
+                class: { active: _vm.filter === _vm.filterAll },
+                attrs: { for: _vm.filterAll }
+              },
+              [_vm._v("All channels")]
+            )
+          ]),
+          _vm._v(" "),
           _c("div", { staticClass: "Polaris-Stack__Item" }, [
             _vm.isLoggedIn
               ? _c(
@@ -37471,7 +38287,20 @@ var __vue_render__ = function() {
                 )
               : _vm._e()
           ])
-        ])
+        ]),
+        _vm._v(" "),
+        _vm.isLoggedIn && _vm.isAdminEmail
+          ? _c("div", { staticClass: "adminButton" }, [
+              _c(
+                "button",
+                {
+                  staticClass: "Polaris-Button",
+                  on: { click: _vm.refreshSeating }
+                },
+                [_vm._v("REFRESH SEATING")]
+              )
+            ])
+          : _vm._e()
       ])
     ])
   ])
@@ -37480,22 +38309,24 @@ var __vue_staticRenderFns__ = [];
 __vue_render__._withStripped = true;
 
   /* style */
-  const __vue_inject_styles__ = undefined;
+  const __vue_inject_styles__ = function (inject) {
+    if (!inject) return
+    inject("data-v-c2211df4_0", { source: "\n.hidden {\n  display: none;\n}\n.active {\n  font-weight: bold;\n}\n.adminButton {\n  margin-top: 20px;\n}\n", map: {"version":3,"sources":["/Users/alinakarpelceva/shopify/hackdays-smart-office-blinds/client/src/components/user-section.vue"],"names":[],"mappings":";AAwEA;EACA,aAAA;AACA;AAEA;EACA,iBAAA;AACA;AAEA;EACA,gBAAA;AACA","file":"user-section.vue","sourcesContent":["<template>\n  <div class=\"Polaris-Layout__Section\">\n    <div class=\"Polaris-Card\">\n      <div class=\"Polaris-Card__Section\">\n        <div class=\"Polaris-Stack\">\n          <div v-if=\"email\" class=\"Polaris-Stack__Item\">\n            <span class=\"Polaris-Badge\" :class=\"{'Polaris-Badge--statusSuccess': hasCorrectDomain, 'Polaris-Badge--statusWarning': !hasCorrectDomain}\">\n              <span class=\"Polaris-VisuallyHidden\">Email</span>\n              {{email}}\n            </span>\n          </div>\n          <div v-if=\"userChannel !== 'no_channel'\" class=\"Polaris-Stack__Item\">\n            <input :id=\"filterMy\" type=\"radio\" class=\"hidden\" name=\"filter\" value=\"my\" @input=\"onInput(filterMy)\">\n            <label :for=\"filterMy\" :class=\"{ active: filter === filterMy }\">My channel</label>\n          </div>\n          <div class=\"Polaris-Stack__Item\">\n            <input :id=\"filterAll\" type=\"radio\" class=\"hidden\" name=\"filter\" value=\"all\" @input=\"onInput(filterAll)\">\n            <label :for=\"filterAll\" :class=\"{ active: filter === filterAll }\">All channels</label>\n          </div>\n          <div class=\"Polaris-Stack__Item\">\n            <a v-if=\"isLoggedIn\" class=\"Polaris-Link\" href=\"#\" @click=\"onLogoutClick\">Logout</a>\n            <a v-if=\"!isLoggedIn\" class=\"Polaris-Link\" href=\"#\" @click=\"onLoginClick\">Login</a>\n          </div>\n        </div>\n        <div class=\"adminButton\" v-if=\"isLoggedIn && isAdminEmail\">\n          <button class=\"Polaris-Button\" @click=\"refreshSeating\">REFRESH SEATING</button>\n        </div>\n      </div>\n    </div>\n  </div>\n</template>\n\n<script>\nimport { filterMy, filterAll, adminEmails } from \"../constants\";\n\nexport default {\n  props: {\n    isLoggedIn: Boolean,\n    hasCorrectDomain: Boolean,\n    email: String,\n    updateFilter: Function,\n    filter: String,\n    userChannel: String,\n  },\n  data() {\n    return {\n      filterAll,\n      filterMy,\n    };\n  },\n  computed: {\n    isAdminEmail() {\n        return adminEmails.includes(this.email);\n    }\n  },\n  methods: {\n    onLoginClick() {\n      this.$root.$emit('login');\n    },\n    onLogoutClick() {\n      this.$root.$emit('logout');\n    },\n    onInput(value) {\n      this.$emit('updateFilter', value);\n    },\n    refreshSeating() {\n      this.$root.$emit('refreshSeating');\n    },\n  },\n}\n</script>\n<style>\n  .hidden {\n    display: none;\n  }\n\n  .active {\n    font-weight: bold;\n  }\n\n  .adminButton {\n    margin-top: 20px;\n  }\n</style>\n"]}, media: undefined });
+
+  };
   /* scoped */
   const __vue_scope_id__ = undefined;
   /* module identifier */
   const __vue_module_identifier__ = undefined;
   /* functional template */
   const __vue_is_functional_template__ = false;
-  /* style inject */
-  
   /* style inject SSR */
   
   /* style inject shadow dom */
   
 
   
-  var UserSection = normalizeComponent(
+  const __vue_component__ = normalizeComponent(
     { render: __vue_render__, staticRenderFns: __vue_staticRenderFns__ },
     __vue_inject_styles__,
     __vue_script__,
@@ -37503,7 +38334,7 @@ __vue_render__._withStripped = true;
     __vue_is_functional_template__,
     __vue_module_identifier__,
     false,
-    undefined,
+    createInjector,
     undefined,
     undefined
   );
@@ -37578,7 +38409,7 @@ __vue_render__$1._withStripped = true;
   
 
   
-  var Action = normalizeComponent(
+  const __vue_component__$1 = normalizeComponent(
     { render: __vue_render__$1, staticRenderFns: __vue_staticRenderFns__$1 },
     __vue_inject_styles__$1,
     __vue_script__$1,
@@ -37662,7 +38493,7 @@ __vue_render__$2._withStripped = true;
   
 
   
-  var Commands = normalizeComponent(
+  const __vue_component__$2 = normalizeComponent(
     { render: __vue_render__$2, staticRenderFns: __vue_staticRenderFns__$2 },
     __vue_inject_styles__$2,
     __vue_script__$2,
@@ -37681,8 +38512,8 @@ const IDLE = 'idle';
 
 var script$3 = {
   components: {
-    Action,
-    Commands,
+    Action: __vue_component__$1,
+    Commands: __vue_component__$2,
   },
   props: {
     name: String,
@@ -37853,7 +38684,7 @@ __vue_render__$3._withStripped = true;
   
 
   
-  var Channel = normalizeComponent(
+  const __vue_component__$3 = normalizeComponent(
     { render: __vue_render__$3, staticRenderFns: __vue_staticRenderFns__$3 },
     __vue_inject_styles__$3,
     __vue_script__$3,
@@ -37870,7 +38701,7 @@ __vue_render__$3._withStripped = true;
 
 var script$4 = {
   components: {
-    Channel
+    Channel: __vue_component__$3
   },
   props: {
       channels: Array,
@@ -37941,7 +38772,7 @@ __vue_render__$4._withStripped = true;
   
 
   
-  var Channels = normalizeComponent(
+  const __vue_component__$4 = normalizeComponent(
     { render: __vue_render__$4, staticRenderFns: __vue_staticRenderFns__$4 },
     __vue_inject_styles__$4,
     __vue_script__$4,
@@ -38113,7 +38944,7 @@ __vue_render__$5._withStripped = true;
   
 
   
-  var ErrorBanner = normalizeComponent(
+  const __vue_component__$5 = normalizeComponent(
     { render: __vue_render__$5, staticRenderFns: __vue_staticRenderFns__$5 },
     __vue_inject_styles__$5,
     __vue_script__$5,
@@ -38129,21 +38960,44 @@ __vue_render__$5._withStripped = true;
 //
 
 var script$6 = {
-  components: {
-    UserSection,
-    Channels,
-    ErrorBanner,
-  },
   props: {
-    initialising: Boolean,
-    allowedDomain: String,
-    firebaseLoaded: Boolean,
-    errorMessage: Error,
-    user: Object,
-    channels: Array,
-    commands: Array,
+      initialising: Boolean,
+      allowedDomain: String,
+      firebaseLoaded: Boolean,
+      errorMessage: Error,
+      user: Object,
+      channels: Array,
+      commands: Array,
+      userChannel: String,
+  },
+  data() {
+      return {
+          filter: filterAll,
+      };
+  },
+  components: {
+    UserSection: __vue_component__,
+    Channels: __vue_component__$4,
+    ErrorBanner: __vue_component__$5,
+  },
+  methods: {
+    updateFilter(value) {
+      this.$set(this, 'filter', value);
+    },
+  },
+  watch: {
+    userChannel: function(newChannel) {
+        this.$set(this, 'filter', newChannel === 'no_channel'? filterAll : filterMy );
+    },
   },
   computed: {
+    channelsToShow() {
+        if (this.filter === filterMy) {
+            return this.channels.filter(c => c.name === this.userChannel);
+        }
+
+        return this.channels;
+    },
     isLoggedIn() {
       return this.user !== null;
     },
@@ -38224,14 +39078,17 @@ var __vue_render__$6 = function() {
                   attrs: {
                     email: _vm.userEmail,
                     "is-logged-in": _vm.isLoggedIn,
-                    "has-correct-domain": _vm.hasCorrectDomain
-                  }
+                    filter: _vm.filter,
+                    "has-correct-domain": _vm.hasCorrectDomain,
+                    "user-channel": _vm.userChannel
+                  },
+                  on: { updateFilter: _vm.updateFilter }
                 }),
                 _vm._v(" "),
                 _vm.isLoggedIn
                   ? _c("channels", {
                       attrs: {
-                        channels: _vm.channels,
+                        channels: _vm.channelsToShow,
                         "has-correct-domain": _vm.hasCorrectDomain,
                         commands: _vm.commands
                       }
@@ -38309,7 +39166,7 @@ __vue_render__$6._withStripped = true;
   
 
   
-  var App = normalizeComponent(
+  const __vue_component__$6 = normalizeComponent(
     { render: __vue_render__$6, staticRenderFns: __vue_staticRenderFns__$6 },
     __vue_inject_styles__$6,
     __vue_script__$6,
@@ -38325,7 +39182,7 @@ __vue_render__$6._withStripped = true;
 new Vue({
     el: '#app',
     components: {
-        App,
+        App: __vue_component__$6,
     },
     data: {
         firebaseConfig: {
@@ -38345,6 +39202,7 @@ new Vue({
         user: null,
         channels: [],
         commands: [],
+        userChannel: null,
     },
     methods: {
         logException(ex) {
@@ -38364,7 +39222,7 @@ new Vue({
 
         initFirebase() {
             try {
-                this.firebase = firebase.initializeApp(this.firebaseConfig);
+                this.firebase = firebase$1.initializeApp(this.firebaseConfig);
 
                 // https://support.google.com/firebase/answer/7015592
                 const isProduction = window.location.hostname !== 'localhost';
@@ -38389,6 +39247,7 @@ new Vue({
 
                     if (user) {
                         this.userSignedIn(user);
+                        this.setChannel();
                         this.initDatabase();
                     } else {
                         this.userSignedOut();
@@ -38398,6 +39257,27 @@ new Vue({
             } catch (e) {
                 this.logException(e);
             }
+        },
+
+        async setChannel() {
+          const channel = await this.firebase.firestore()
+            .collection('employees')
+            .doc('vilnius')
+            .get()
+            .then(doc => {
+              if (doc.exists) {
+                const employee = doc.data().seats.find(seat => {
+                  return seat.email === this.user.email;
+                });
+                return employee.channel;
+              } else {
+                console.log("No such document!");
+              }
+            }).catch((error) => {
+              console.log("Error getting document:", error);
+            });
+
+          this.$set(this, 'userChannel', channel);
         },
 
         userSignedIn(user) {
@@ -38511,14 +39391,14 @@ new Vue({
 
         async setPersistence() {
             try {
-                await this.firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                await this.firebase.auth().setPersistence(firebase$1.auth.Auth.Persistence.LOCAL);
             } catch (error) {
                 this.logException(error);
             }
         },
 
         async signIn() {
-            const provider = new firebase.auth.GoogleAuthProvider();
+            const provider = new firebase$1.auth.GoogleAuthProvider();
             provider.addScope('openid');
             provider.addScope('profile');
             provider.addScope('email');
@@ -38540,6 +39420,22 @@ new Vue({
                     this.logException(result.data.message.details);                        
                 } else {
                     this.logMessage(result);
+                }
+            } catch (error) {
+                this.logException(error);
+            }
+        },
+
+        async refreshSeating() {
+            const refreshSeating = this.firebase.functions().httpsCallable('refreshSeating');
+
+            try {
+                const result = await refreshSeating();
+
+                if (result.data && result.data.code !== 200) {
+                  this.logException(result.data.message.details);
+                } else {
+                  this.logMessage(result);
                 }
             } catch (error) {
                 this.logException(error);
@@ -38577,6 +39473,10 @@ new Vue({
 
         this.$on('unsubscribe', (channelName) => {
             this.unsubscribe(channelName);
+        });
+
+        this.$on('refreshSeating', () => {
+          this.refreshSeating();
         });
     },
 });
