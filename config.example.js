@@ -3,3 +3,4 @@ exports.officeSpaceAPIToken = '<YOUR_API_TOKEN>';
 exports.adminEmails = ['<YOUR_EMAIL_HERE>'];
 exports.officeSpaceUrl = "";
 exports.officeSpaceSeatsUrl = "";
+exports.firebaseAPIKey = "";

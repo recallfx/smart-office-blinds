@@ -2,6 +2,7 @@ import firebase from '@firebase/app';
 import '@firebase/auth';
 import '@firebase/firestore';
 import '@firebase/functions';
+import { firebaseAPIKey } from '../../config';
 
 import Vue from 'vue/dist/vue.esm.browser';
 import App from './components/app.vue';
@@ -13,7 +14,7 @@ new Vue({
     },
     data: {
         firebaseConfig: {
-            apiKey: "AIzaSyDd-E2W1A2Pxh5B6Njiv4QByAZ3-eb1rgg",
+            apiKey: firebaseAPIKey,
             authDomain: "sob-mbieliau-firebase-2d798.firebaseapp.com",
             databaseURL: "https://sob-mbieliau-firebase-2d798.firebaseio.com",
             projectId: "sob-mbieliau-firebase-2d798",

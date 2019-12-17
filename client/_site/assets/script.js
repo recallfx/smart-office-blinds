@@ -26215,6 +26215,9 @@ var version$3 = "0.4.28";
 registerFunctions(firebase$1);
 firebase$1.registerVersion(name$d, version$3);
 
+var adminEmails = ['alina.karpelceva@shopify.com'];
+var firebaseAPIKey = "AIzaSyDd-E2W1A2Pxh5B6Njiv4QByAZ3-eb1rgg";
+
 /*!
  * Vue.js v2.6.11
  * (c) 2014-2019 Evan You
@@ -38233,8 +38236,6 @@ Vue.compile = compileToFunctions;
 const filterAll = 'all';
 const filterMy = 'my';
 
-var adminEmails = ['alina.karpelceva@shopify.com'];
-
 //
 
 var script = {
@@ -39417,7 +39418,7 @@ new Vue({
     },
     data: {
         firebaseConfig: {
-            apiKey: "AIzaSyDd-E2W1A2Pxh5B6Njiv4QByAZ3-eb1rgg",
+            apiKey: firebaseAPIKey,
             authDomain: "sob-mbieliau-firebase-2d798.firebaseapp.com",
             databaseURL: "https://sob-mbieliau-firebase-2d798.firebaseio.com",
             projectId: "sob-mbieliau-firebase-2d798",
