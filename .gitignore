@@ -67,15 +67,11 @@ node_modules/
 
 .DS_Store
 
-<<<<<<< HEAD
-server/instance/*
-client/_site/assets/script.js
-
 .idea/
 
-__pycache__/
-
 config.js
+
+__pycache__
 
 server/smart_blinds/config.py
 server/smart_blinds/service_account_key.json
