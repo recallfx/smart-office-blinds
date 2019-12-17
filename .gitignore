@@ -67,6 +67,10 @@ node_modules/
 
 .DS_Store
 
+.idea/
+
+config.js
+
 __pycache__
 
 server/smart_blinds/config.py

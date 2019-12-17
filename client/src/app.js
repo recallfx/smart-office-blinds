@@ -2,6 +2,7 @@ import firebase from '@firebase/app';
 import '@firebase/auth';
 import '@firebase/firestore';
 import '@firebase/functions';
+import { firebaseAPIKey } from '../../config';
 
 import Vue from 'vue/dist/vue.esm.browser';
 import App from './components/app.vue';
@@ -13,7 +14,7 @@ new Vue({
     },
     data: {
         firebaseConfig: {
-            apiKey: "AIzaSyDd-E2W1A2Pxh5B6Njiv4QByAZ3-eb1rgg",
+            apiKey: firebaseAPIKey,
             authDomain: "sob-mbieliau-firebase-2d798.firebaseapp.com",
             databaseURL: "https://sob-mbieliau-firebase-2d798.firebaseio.com",
             projectId: "sob-mbieliau-firebase-2d798",
@@ -29,6 +30,7 @@ new Vue({
         user: null,
         channels: [],
         commands: [],
+        userChannel: null,
     },
     methods: {
         logException(ex) {
@@ -73,6 +75,7 @@ new Vue({
 
                     if (user) {
                         this.userSignedIn(user);
+                        this.setChannel();
                         this.initDatabase();
                     } else {
                         this.userSignedOut();
@@ -82,6 +85,27 @@ new Vue({
             } catch (e) {
                 this.logException(e);
             }
+        },
+
+        async setChannel() {
+          const channel = await this.firebase.firestore()
+            .collection('employees')
+            .doc('vilnius')
+            .get()
+            .then(doc => {
+              if (doc.exists) {
+                const employee = doc.data().seats.find(seat => {
+                  return seat.email === this.user.email;
+                });
+                return employee.channel;
+              } else {
+                console.log('No such document!');
+              }
+            }).catch((error) => {
+              this.logException(error);
+            })
+
+          this.$set(this, 'userChannel', channel);
         },
 
         userSignedIn(user) {
@@ -113,7 +137,7 @@ new Vue({
         async initDatabase() {
             try {
                 const channels = [];
-                const querySnapshot = await this.firebase.firestore().collection("channels").get();                
+                const querySnapshot = await this.firebase.firestore().collection("channels").get();
 
                 querySnapshot.forEach((doc) => {
                     channels.push(doc.data());
@@ -221,9 +245,25 @@ new Vue({
                 const result = await setCommand({ channel, action });
 
                 if (result.data && result.data.code !== 200) {
-                    this.logException(result.data.message.details);                        
+                    this.logException(result.data.message.details);
                 } else {
                     this.logMessage(result);
+                }
+            } catch (error) {
+                this.logException(error);
+            }
+        },
+
+        async refreshSeating() {
+            const refreshSeating = this.firebase.functions().httpsCallable('refreshSeating');
+
+            try {
+                const result = await refreshSeating();
+
+                if (result.data && result.data.code !== 200) {
+                  this.logException(result.data.message.details);
+                } else {
+                  this.logMessage(result);
                 }
             } catch (error) {
                 this.logException(error);
@@ -261,6 +301,10 @@ new Vue({
 
         this.$on('unsubscribe', (channelName) => {
             this.unsubscribe(channelName);
+        });
+
+        this.$on('refreshSeating', () => {
+          this.refreshSeating();
         });
     },
 });
