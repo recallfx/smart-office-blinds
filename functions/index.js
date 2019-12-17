@@ -8,6 +8,7 @@ const axios = require('axios');
 const seatingHelper = require('./seatingHelper');
 const config = require('../config');
 
+
 // CORS Express middleware to enable CORS Requests.
 const cors = require('cors')({
   origin: true,
@@ -61,6 +62,36 @@ exports.command = functions.https.onRequest((req, res) => {
       // [START sendErrorResponse]
       res.json({ commands, writeResult: null });
       // [END sendErrorResponse]
+    }
+  });
+});
+
+// [START trigger]
+exports.setChannelStatus = functions.https.onRequest((req, res) => {
+  return cors(req, res, async () => {
+    // if (req.body.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+    //   return res.status(401).json({message:'Authentication Required!'});
+    // }
+
+    const { channel, status, action = null } = req.query;
+
+    try {
+      const channelDocRef = admin.firestore().collection('channels').doc(channel);
+      const doc = await channelDocRef.get();
+
+      let params = {
+        status: status
+      }
+
+      if (action !== null) {
+        params.last_action = action;
+      }
+
+      const writeResult = await channelDocRef.set(params, { merge: true });
+
+      return res.status(200).json({ writeResult });
+    } catch (err) {
+      return res.status(400).json({message: 'Internal Error', err});
     }
   });
 });
@@ -154,20 +185,21 @@ exports.refreshSeating = functions.https.onCall(async (data, context) => {
 
   Promise.all(promises)
     .then(responses => {
-    // Some seats have employee url, but there is no employee for that and on request we get 404. Then error is thrown and undefined is returned.
-    admin.firestore()
-      .collection('employees')
-      .doc('vilnius')
-      .set({
-        seats: responses.filter(r => typeof r !== 'undefined'),
-      })
-      .catch(err => console.log(err));
+      // Some seats have employee url, but there is no employee for that and on request we get 404. Then error is thrown and undefined is returned.
+      admin.firestore()
+        .collection('employees')
+        .doc('vilnius')
+        .set({
+          seats: responses.filter(r => typeof r !== 'undefined'),
+        })
+        .catch(err => console.log(err));
 
-    return true;
-  })
+      return true;
+    })
     .catch((err) => {
       console.log(err);
     });
 
 });
+
 // [END all]
