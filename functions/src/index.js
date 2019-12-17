@@ -42,9 +42,9 @@ function saveCommand(channel, action, email) {
   return commandRef.set(newCommand);
 }
 
-exports.setChannelStatus2 = functions.https.onRequest((req, res) => {
+exports.setChannelStatus = functions.https.onRequest((req, res) => {
   return cors(req, res, async () => {
-    if (!availableApiTokens.includes(req.body.auth_token)) {
+    if (!availableApiTokens.includes(req.query.auth_token)) {
       return res.status(401).json(authenticationRequiredResponseObject);
     }
 
@@ -76,7 +76,7 @@ exports.setChannelStatus2 = functions.https.onRequest((req, res) => {
   });
 });
 
-exports.setAlexaCommand2 = functions.https.onRequest((req, res) => {
+exports.setAlexaCommand = functions.https.onRequest((req, res) => {
   return cors(req, res, async () => {
     if (!availableApiTokens.includes(req.body.auth_token)) {
       return res.status(401).json(authenticationRequiredResponseObject);
@@ -98,7 +98,7 @@ exports.setAlexaCommand2 = functions.https.onRequest((req, res) => {
   });
 });
 
-exports.setCommand2 = functions.https.onCall(async (data, context) => {
+exports.setCommand = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     return authenticationRequiredResponseObject;
   }
@@ -118,7 +118,7 @@ exports.setCommand2 = functions.https.onCall(async (data, context) => {
   }
 });
 
-exports.refreshSeating2 = functions.https.onCall(async (data, context) => {
+exports.refreshSeating = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     return authenticationRequiredResponseObject;
   }

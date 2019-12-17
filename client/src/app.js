@@ -107,7 +107,6 @@ new Vue({
             this.initDatabase();
           } else {
             this.userSignedOut();
-            this.stopFollowing();
           }
         });
       } catch (e) {
@@ -137,7 +136,7 @@ new Vue({
           const user = mappedUsers.find(user => user.email === this.user.email);
 
           if (user) {
-            channelName = channelNameuser.channelName;
+            channelName = user.channelName;
           } else {
             this.logMessage(`User ${this.user.email} not found in database!`);
           }

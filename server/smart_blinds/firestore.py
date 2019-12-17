@@ -4,6 +4,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+from .config import config
 
 class Collections():
     CHANNELS = 'channels'
@@ -67,8 +68,7 @@ class Firestore():
         self.doc_watch = None
         self.command_callback = command_callback
 
-        script_dir = os.path.dirname(__file__)
-        cred_path = os.path.join(script_dir, SERVICE_ACCOUNT_KEY_FILE_NAME)
+        cred_path = os.path.join('../', config['serviceAccountFileName'])
         cred = credentials.Certificate(cred_path)
 
         firebase_admin.initialize_app(cred)
@@ -97,7 +97,7 @@ class Firestore():
 
     def on_snapshot(self, docs, changes, read_time):
         for change in changes:
-            if change.type.name == ACCEPTED_CHANGE_TYPE_NAME and command_callback != None:
+            if change.type.name == ACCEPTED_CHANGE_TYPE_NAME and self.command_callback != None:
                 self.command_callback(change.document.get(
                     CommandFields.ACTION), change.document.get(CommandFields.CHANNEL))
 

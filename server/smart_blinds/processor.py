@@ -57,7 +57,7 @@ class Processor(Process):
             pass
 
     def update_channel_status(self, status, action=None):
-        data = {'channel': self.channel_name, 'status': status}
+        data = {'channel': self.channel_name, 'status': status, 'auth_token': config['availableApiTokens'][0]}
 
         if (action is not None):
             data['action'] = action
