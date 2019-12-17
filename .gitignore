@@ -67,6 +67,7 @@ node_modules/
 
 .DS_Store
 
+<<<<<<< HEAD
 server/instance/*
 client/_site/assets/script.js
 
@@ -75,3 +76,8 @@ client/_site/assets/script.js
 __pycache__/
 
 config.js
+
+server/smart_blinds/config.py
+server/smart_blinds/service_account_key.json
+
+client/_site/assets/script.js

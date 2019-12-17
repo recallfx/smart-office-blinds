@@ -1,36 +1,46 @@
 import argparse
 
-import instance.config as config
-from smart_blinds.utils import validate_command
-
 from .actions import Actions
+from .config import CHANNELS, DEBUG
+from .firestore import Firestore
 from .smart_blinds import SmartBlinds
+from .utils import validate_command
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Smart office blinds')
-    parser.add_argument('action', choices=[
-        Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.OPEN, Actions.CLOSE, Actions.STOP])
-
-    parser.add_argument('-c', '--channel', dest='channel',
-                        default=None, help='Channel is a servo name assigned to specific remote buttons (default: auto)')
-    parser.add_argument('-u', '--user-name', dest='user',
-                        default=None, help='User name if channel is auto (default: none)')
+    parser = argparse.ArgumentParser(prog='Smart Office Blinds server',
+                                     description='Server instance that is dependent on firebase vonnection')
+    parser.add_argument('-v', '--version', action='version',
+                        version='%(prog)s 2.0')
+    parser.add_argument('-s', '--server', action='store_true',
+                        help='Run as a service. All other arguments are ignored.')
+    parser.add_argument('action', nargs='?', choices=[
+                        Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.OPEN, Actions.CLOSE, Actions.STOP])
+    parser.add_argument('-c', '--channel', dest='channel', default=None,
+                        help='Channel is a servo name assigned to specific remote buttons')
 
     args = parser.parse_args()
 
-    smart_blinds = SmartBlinds(
-        {'CHANNELS': config.CHANNELS, 'DATA': config.DATA, 'DEBUG': config.DEBUG})
+    firestore = None
+    smart_blinds = SmartBlinds(CHANNELS, DEBUG)
 
-    message = validate_command(config.CHANNELS, args.action, args.channel)
-    smart_blinds.command(args.action, args.channel)
+    if (args.server):
+        firestore = Firestore(CHANNELS, lambda action,
+                              channel: smart_blinds.command(action, channel))
 
-    print(message)
+        firestore.start()
+    else:
+        message = validate_command(CHANNELS, args.action, args.channel)
+        smart_blinds.command(args.action, args.channel)
+        print('[INFO] {}'.format(message))
 
     try:
         smart_blinds.join_processors()
     except KeyboardInterrupt:
-        pass
+        print('[INFO] Exiting')
+
+        if firestore != None:
+            firestore.stop()
 
 
 if __name__ == "__main__":

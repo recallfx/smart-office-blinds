@@ -28,7 +28,7 @@ class BlindsApi():
             self.pigpio_pi.set_mode(self.servo_pin, pigpio.OUTPUT)
             self.pigpio_pi.set_PWM_frequency(self.servo_pin, 50)
         else:
-            print('[debug] Skipping pigpio init in debug mode')
+            print('[DEBUG] Skipping pigpio init in debug mode')
 
         self.idle(True)
 
@@ -38,13 +38,13 @@ class BlindsApi():
         self.state = state
 
         if self.debug_mode:
-            print('[debug] Set state: {0}'.format(state))
+            print('[DEBUG] Set state: {0}'.format(state))
 
     def _set_angle(self, angle):
         if not self.debug_mode:
             self.pigpio_pi.set_servo_pulsewidth(self.servo_pin, angle)
         else:
-            print('[debug] Set angle "{0}" on servo_pin "{1}"'.format(
+            print('[DEBUG] Set angle "{0}" on servo_pin "{1}"'.format(
                 angle, self.servo_pin))
 
         time.sleep(0.2)
@@ -54,7 +54,7 @@ class BlindsApi():
         self._set_angle(angle)
 
         if self.debug_mode:
-            print('[debug] Sleeping for: {0}'.format(sleep))
+            print('[DEBUG] Sleeping for: {0}'.format(sleep))
 
         time.sleep(sleep)
 

@@ -59,4 +59,4 @@ class Processor(Process):
         response = requests.get('https://us-central1-sob-mbieliau-firebase-2d798.cloudfunctions.net/setChannelStatus', params=data)
 
         if self.debug_mode:
-            print('[debug] Update channel status. Channel: {}, status: {}, action: {}, response: {}'.format(self.channel_name, status, action, response.text))
+            print('[DEBUG] Update channel status. Channel: {}, status: {}, action: {}, response: {}'.format(self.channel_name, status, action, response.text))
