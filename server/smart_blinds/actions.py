@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+
 class Actions():
     IDLE = 'idle'
     OPEN = 'open'

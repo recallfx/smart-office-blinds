@@ -73,7 +73,8 @@ config.js
 
 __pycache__
 
-server/smart_blinds/config.py
-server/smart_blinds/service_account_key.json
+config.json
+service_account_key.json
 
 client/_site/assets/script.js
+functions/index.js

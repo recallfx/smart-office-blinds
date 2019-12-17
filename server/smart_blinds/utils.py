@@ -4,6 +4,7 @@ import unicodedata
 
 from .actions import Actions
 
+
 def validate_command(channels, action, channel_name=None):
     if not channel_name in channels.keys():
         raise AssertionError(

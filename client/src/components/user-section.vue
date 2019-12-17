@@ -31,8 +31,8 @@
 </template>
 
 <script>
-import { filterMy, filterAll } from '../constants';
-import { adminEmails } from '../../../config';
+import { filterMy, filterAll } from '../../../constants';
+import { adminEmails } from '../../../config.json';
 
 export default {
   props: {

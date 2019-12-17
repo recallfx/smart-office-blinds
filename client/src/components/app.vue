@@ -43,12 +43,13 @@
 import UserSection from './user-section.vue';
 import Channels from './channels.vue';
 import ErrorBanner from './error-banner.vue';
-import { filterAll, filterMy } from "../constants";
+import { filterAll, filterMy } from '../../../constants';
+import {hasAllowedDomain} from '../utils';
 
 export default {
   props: {
       initialising: Boolean,
-      allowedDomain: String,
+      allowedDomains: Array,
       firebaseLoaded: Boolean,
       errorMessage: Error,
       user: Object,
@@ -95,15 +96,11 @@ export default {
       return null;
     },
     hasCorrectDomain() {
-      if (this.userEmail) {
-        return this.userEmail.endsWith(this.allowedDomain);
-      }
-
-      return false;
+      return hasAllowedDomain(this.userEmail, this.allowedDomains);
     },
     wrongDomainError() {
       if (this.isLoggedIn && !this.hasCorrectDomain) {
-        return `Only ${this.allowedDomain} domain is supported.`;
+        return 'Your email domain is unsupported';
       }
 
       return null;

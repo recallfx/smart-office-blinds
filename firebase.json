@@ -5,11 +5,13 @@
   },
   "functions": {
     "predeploy": [
-      "npm run build:prod",
-      "npm --prefix \"$RESOURCE_DIR\" run lint"
     ]
   },
   "hosting": {
+    "predeploy": [
+      "npm run build:prod",
+      "npm run lint"
+    ],
     "public": "client/_site",
     "ignore": [
       "firebase.json",

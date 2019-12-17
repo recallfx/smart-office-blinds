@@ -9,7 +9,7 @@
         <div class="Polaris-Stack__Item" v-if="busy">
           <span class="Polaris-Badge Polaris-Badge--statusInfo"><span class="Polaris-VisuallyHidden">Info</span><span class="Polaris-Badge__Content">{{ capitalizedStatus }}</span></span>
         </div>
-      </div>      
+      </div>
     </div>
 
     <div class="Polaris-ButtonGroup">

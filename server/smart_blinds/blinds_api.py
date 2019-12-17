@@ -12,6 +12,7 @@ CLOSE_TIME_TO_30_PERCENT = 45
 TIME_TO_FULL_CLOSE_OPEN = 60
 PARTIAL_OPEN_TIMES = 4
 
+
 class BlindsApi():
     state = Actions.IDLE
     previous_state = None
