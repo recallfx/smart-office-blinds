@@ -98,10 +98,10 @@ new Vue({
                 });
                 return employee.channel;
               } else {
-                console.log("No such document!");
+                console.log('No such document!');
               }
             }).catch((error) => {
-              console.log("Error getting document:", error);
+              this.logException(error);
             })
 
           this.$set(this, 'userChannel', channel);
@@ -136,7 +136,7 @@ new Vue({
         async initDatabase() {
             try {
                 const channels = [];
-                const querySnapshot = await this.firebase.firestore().collection("channels").get();                
+                const querySnapshot = await this.firebase.firestore().collection("channels").get();
 
                 querySnapshot.forEach((doc) => {
                     channels.push(doc.data());
@@ -244,7 +244,7 @@ new Vue({
                 const result = await setCommand({ channel, action });
 
                 if (result.data && result.data.code !== 200) {
-                    this.logException(result.data.message.details);                        
+                    this.logException(result.data.message.details);
                 } else {
                     this.logMessage(result);
                 }

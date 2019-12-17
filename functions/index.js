@@ -6,7 +6,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const seatingHelper = require('./seatingHelper');
-const config = require('./config');
+const config = require('../config');
 
 // CORS Express middleware to enable CORS Requests.
 const cors = require('cors')({
@@ -120,7 +120,7 @@ exports.setAlexaCommand = functions.https.onRequest((req, res) => {
 });
 
 exports.refreshSeating = functions.https.onCall(async (data, context) => {
-  const seats = await axios("https://shopify.officespacesoftware.com/api/1/seats?floor_id=63", {
+  const seats = await axios(config.officeSpaceSeatsUrl, {
     method: 'GET',
     headers:{
       'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ exports.refreshSeating = functions.https.onCall(async (data, context) => {
   const promises = occupiedSeatsMappedOnPod
     .filter(seat => seat && seat.occupancy && seat.occupancy.employee_url)
     .map((seat) => {
-      return axios("https://shopify.officespacesoftware.com" + seat.occupancy.employee_url, {
+      return axios(config.officeSpaceUrl + seat.occupancy.employee_url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -163,7 +163,7 @@ exports.refreshSeating = functions.https.onCall(async (data, context) => {
       })
       .catch(err => console.log(err));
 
-    return 1;
+    return true;
   })
     .catch((err) => {
       console.log(err);

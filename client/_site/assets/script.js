@@ -1,6 +1,6 @@
 'use strict';
 
-const NODE_ENV = "undefined";
+const NODE_ENV = "development";
 
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
@@ -38232,7 +38232,8 @@ Vue.compile = compileToFunctions;
 
 const filterAll = 'all';
 const filterMy = 'my';
-const adminEmails = ['alina.karpelceva@shopify.com', 'marius.beliauskas@shopify.com'];
+
+var adminEmails = ['alina.karpelceva@shopify.com'];
 
 //
 
@@ -38253,8 +38254,11 @@ var script = {
   },
   computed: {
     isAdminEmail() {
-        return adminEmails.includes(this.email);
-    }
+      return adminEmails.includes(this.email);
+    },
+    userHasChannel() {
+      return this.userChannel !== 'no_channel';
+    },
   },
   methods: {
     onLoginClick() {
@@ -38435,7 +38439,7 @@ var __vue_render__ = function() {
               ])
             : _vm._e(),
           _vm._v(" "),
-          _vm.userChannel !== "no_channel"
+          _vm.userHasChannel
             ? _c("div", { staticClass: "Polaris-Stack__Item" }, [
                 _c("input", {
                   staticClass: "hidden",
@@ -38538,7 +38542,7 @@ __vue_render__._withStripped = true;
   /* style */
   const __vue_inject_styles__ = function (inject) {
     if (!inject) return
-    inject("data-v-c2211df4_0", { source: "\n.hidden {\n  display: none;\n}\n.active {\n  font-weight: bold;\n}\n.adminButton {\n  margin-top: 20px;\n}\n", map: {"version":3,"sources":["/Users/alinakarpelceva/shopify/hackdays-smart-office-blinds/client/src/components/user-section.vue"],"names":[],"mappings":";AAwEA;EACA,aAAA;AACA;AAEA;EACA,iBAAA;AACA;AAEA;EACA,gBAAA;AACA","file":"user-section.vue","sourcesContent":["<template>\n  <div class=\"Polaris-Layout__Section\">\n    <div class=\"Polaris-Card\">\n      <div class=\"Polaris-Card__Section\">\n        <div class=\"Polaris-Stack\">\n          <div v-if=\"email\" class=\"Polaris-Stack__Item\">\n            <span class=\"Polaris-Badge\" :class=\"{'Polaris-Badge--statusSuccess': hasCorrectDomain, 'Polaris-Badge--statusWarning': !hasCorrectDomain}\">\n              <span class=\"Polaris-VisuallyHidden\">Email</span>\n              {{email}}\n            </span>\n          </div>\n          <div v-if=\"userChannel !== 'no_channel'\" class=\"Polaris-Stack__Item\">\n            <input :id=\"filterMy\" type=\"radio\" class=\"hidden\" name=\"filter\" value=\"my\" @input=\"onInput(filterMy)\">\n            <label :for=\"filterMy\" :class=\"{ active: filter === filterMy }\">My channel</label>\n          </div>\n          <div class=\"Polaris-Stack__Item\">\n            <input :id=\"filterAll\" type=\"radio\" class=\"hidden\" name=\"filter\" value=\"all\" @input=\"onInput(filterAll)\">\n            <label :for=\"filterAll\" :class=\"{ active: filter === filterAll }\">All channels</label>\n          </div>\n          <div class=\"Polaris-Stack__Item\">\n            <a v-if=\"isLoggedIn\" class=\"Polaris-Link\" href=\"#\" @click=\"onLogoutClick\">Logout</a>\n            <a v-if=\"!isLoggedIn\" class=\"Polaris-Link\" href=\"#\" @click=\"onLoginClick\">Login</a>\n          </div>\n        </div>\n        <div class=\"adminButton\" v-if=\"isLoggedIn && isAdminEmail\">\n          <button class=\"Polaris-Button\" @click=\"refreshSeating\">REFRESH SEATING</button>\n        </div>\n      </div>\n    </div>\n  </div>\n</template>\n\n<script>\nimport { filterMy, filterAll, adminEmails } from \"../constants\";\n\nexport default {\n  props: {\n    isLoggedIn: Boolean,\n    hasCorrectDomain: Boolean,\n    email: String,\n    updateFilter: Function,\n    filter: String,\n    userChannel: String,\n  },\n  data() {\n    return {\n      filterAll,\n      filterMy,\n    };\n  },\n  computed: {\n    isAdminEmail() {\n        return adminEmails.includes(this.email);\n    }\n  },\n  methods: {\n    onLoginClick() {\n      this.$root.$emit('login');\n    },\n    onLogoutClick() {\n      this.$root.$emit('logout');\n    },\n    onInput(value) {\n      this.$emit('updateFilter', value);\n    },\n    refreshSeating() {\n      this.$root.$emit('refreshSeating');\n    },\n  },\n}\n</script>\n<style>\n  .hidden {\n    display: none;\n  }\n\n  .active {\n    font-weight: bold;\n  }\n\n  .adminButton {\n    margin-top: 20px;\n  }\n</style>\n"]}, media: undefined });
+    inject("data-v-6ffc2d71_0", { source: "\n.hidden {\n  display: none;\n}\n.active {\n  font-weight: bold;\n}\n.adminButton {\n  margin-top: 20px;\n}\n", map: {"version":3,"sources":["/Users/alinakarpelceva/shopify/hackdays-smart-office-blinds/client/src/components/user-section.vue"],"names":[],"mappings":";AA4EA;EACA,aAAA;AACA;AAEA;EACA,iBAAA;AACA;AAEA;EACA,gBAAA;AACA","file":"user-section.vue","sourcesContent":["<template>\n  <div class=\"Polaris-Layout__Section\">\n    <div class=\"Polaris-Card\">\n      <div class=\"Polaris-Card__Section\">\n        <div class=\"Polaris-Stack\">\n          <div v-if=\"email\" class=\"Polaris-Stack__Item\">\n            <span class=\"Polaris-Badge\" :class=\"{'Polaris-Badge--statusSuccess': hasCorrectDomain, 'Polaris-Badge--statusWarning': !hasCorrectDomain}\">\n              <span class=\"Polaris-VisuallyHidden\">Email</span>\n              {{email}}\n            </span>\n          </div>\n          <div v-if=\"userHasChannel\" class=\"Polaris-Stack__Item\">\n            <input :id=\"filterMy\" type=\"radio\" class=\"hidden\" name=\"filter\" value=\"my\" @input=\"onInput(filterMy)\">\n            <label :for=\"filterMy\" :class=\"{ active: filter === filterMy }\">My channel</label>\n          </div>\n          <div class=\"Polaris-Stack__Item\">\n            <input :id=\"filterAll\" type=\"radio\" class=\"hidden\" name=\"filter\" value=\"all\" @input=\"onInput(filterAll)\">\n            <label :for=\"filterAll\" :class=\"{ active: filter === filterAll }\">All channels</label>\n          </div>\n          <div class=\"Polaris-Stack__Item\">\n            <a v-if=\"isLoggedIn\" class=\"Polaris-Link\" href=\"#\" @click=\"onLogoutClick\">Logout</a>\n            <a v-if=\"!isLoggedIn\" class=\"Polaris-Link\" href=\"#\" @click=\"onLoginClick\">Login</a>\n          </div>\n        </div>\n        <div class=\"adminButton\" v-if=\"isLoggedIn && isAdminEmail\">\n          <button class=\"Polaris-Button\" @click=\"refreshSeating\">REFRESH SEATING</button>\n        </div>\n      </div>\n    </div>\n  </div>\n</template>\n\n<script>\nimport { filterMy, filterAll } from '../constants';\nimport { adminEmails } from '../../../config';\n\nexport default {\n  props: {\n    isLoggedIn: Boolean,\n    hasCorrectDomain: Boolean,\n    email: String,\n    updateFilter: Function,\n    filter: String,\n    userChannel: String,\n  },\n  data() {\n    return {\n      filterAll,\n      filterMy,\n    };\n  },\n  computed: {\n    isAdminEmail() {\n      return adminEmails.includes(this.email);\n    },\n    userHasChannel() {\n      return this.userChannel !== 'no_channel';\n    },\n  },\n  methods: {\n    onLoginClick() {\n      this.$root.$emit('login');\n    },\n    onLogoutClick() {\n      this.$root.$emit('logout');\n    },\n    onInput(value) {\n      this.$emit('updateFilter', value);\n    },\n    refreshSeating() {\n      this.$root.$emit('refreshSeating');\n    },\n  },\n}\n</script>\n<style>\n  .hidden {\n    display: none;\n  }\n\n  .active {\n    font-weight: bold;\n  }\n\n  .adminButton {\n    margin-top: 20px;\n  }\n</style>\n"]}, media: undefined });
 
   };
   /* scoped */
@@ -39498,10 +39502,10 @@ new Vue({
                 });
                 return employee.channel;
               } else {
-                console.log("No such document!");
+                console.log('No such document!');
               }
             }).catch((error) => {
-              console.log("Error getting document:", error);
+              this.logException(error);
             });
 
           this.$set(this, 'userChannel', channel);
@@ -39536,7 +39540,7 @@ new Vue({
         async initDatabase() {
             try {
                 const channels = [];
-                const querySnapshot = await this.firebase.firestore().collection("channels").get();                
+                const querySnapshot = await this.firebase.firestore().collection("channels").get();
 
                 querySnapshot.forEach((doc) => {
                     channels.push(doc.data());
@@ -39644,7 +39648,7 @@ new Vue({
                 const result = await setCommand({ channel, action });
 
                 if (result.data && result.data.code !== 200) {
-                    this.logException(result.data.message.details);                        
+                    this.logException(result.data.message.details);
                 } else {
                     this.logMessage(result);
                 }

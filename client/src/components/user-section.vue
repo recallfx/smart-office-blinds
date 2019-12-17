@@ -9,7 +9,7 @@
               {{email}}
             </span>
           </div>
-          <div v-if="userChannel !== 'no_channel'" class="Polaris-Stack__Item">
+          <div v-if="userHasChannel" class="Polaris-Stack__Item">
             <input :id="filterMy" type="radio" class="hidden" name="filter" value="my" @input="onInput(filterMy)">
             <label :for="filterMy" :class="{ active: filter === filterMy }">My channel</label>
           </div>
@@ -31,7 +31,8 @@
 </template>
 
 <script>
-import { filterMy, filterAll, adminEmails } from "../constants";
+import { filterMy, filterAll } from '../constants';
+import { adminEmails } from '../../../config';
 
 export default {
   props: {
@@ -50,8 +51,11 @@ export default {
   },
   computed: {
     isAdminEmail() {
-        return adminEmails.includes(this.email);
-    }
+      return adminEmails.includes(this.email);
+    },
+    userHasChannel() {
+      return this.userChannel !== 'no_channel';
+    },
   },
   methods: {
     onLoginClick() {
