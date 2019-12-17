@@ -32,7 +32,11 @@
             @updateFilter="updateFilter"
             :user-channel="userChannel"
           />
-          <channels v-if="isLoggedIn" :channels="channelsToShow" :has-correct-domain="hasCorrectDomain" :commands="commands" />
+          <channels
+            v-if="isLoggedIn"
+            :channels="channelsToShow"
+            :has-correct-domain="hasCorrectDomain"
+            :commands="commands" />
         </template>
       </div>
     </div>

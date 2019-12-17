@@ -43,9 +43,9 @@ new Vue({
       this.signOut();
     });
 
-    this.$on('command', (channel, action) => {
+    this.$on('command', (channel, action, callback) => {
       this.clearException();
-      this.command(channel, action);
+      this.command(channel, action, callback);
     });
 
     this.$on('subscribe', channelName => {
@@ -56,8 +56,9 @@ new Vue({
       this.unsubscribe(channelName);
     });
 
-    this.$on('refreshSeating', () => {
-      this.refreshSeating();
+    this.$on('refreshSeating', (callback) => {
+      this.clearException();
+      this.refreshSeating(callback);
     });
   },
   methods: {
@@ -296,7 +297,7 @@ new Vue({
       }
     },
 
-    async command(channel, action) {
+    async command(channel, action, callback) {
       const setCommand = this.firebaseApp.functions().httpsCallable('setCommand');
 
       try {
@@ -310,9 +311,13 @@ new Vue({
       } catch (error) {
         this.logException(error);
       }
+
+      if (callback) {
+        callback();
+      }
     },
 
-    async refreshSeating() {
+    async refreshSeating(callback) {
       const refreshSeating = this.firebaseApp
         .functions()
         .httpsCallable('refreshSeating');
@@ -327,6 +332,10 @@ new Vue({
         }
       } catch (error) {
         this.logException(error);
+      }
+
+      if (callback) {
+        callback();
       }
     },
   },

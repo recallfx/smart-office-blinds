@@ -23,7 +23,19 @@
           </div>
         </div>
         <div class="adminButton" v-if="isLoggedIn && isAdminEmail">
-          <button class="Polaris-Button" @click="refreshSeating">REFRESH SEATING</button>
+            <div class="Polaris-ButtonGroup__Item">
+              <button
+                type="button"
+                class="Polaris-Button"
+                :class="{'Polaris-Button--disabled': loading }"
+                :disabled="loading"
+                @click="onRefreshSeating"
+              >
+                <span class="Polaris-Button__Content">
+                  <span class="Polaris-Button__Text">Refresh Seating</span>
+                </span>
+              </button>
+            </div>
         </div>
       </div>
     </div>
@@ -47,6 +59,7 @@ export default {
     return {
       filterAll,
       filterMy,
+      loading: false,
     };
   },
   computed: {
@@ -54,7 +67,7 @@ export default {
       return adminEmails.includes(this.email);
     },
     userHasChannel() {
-      return this.userChannel !== 'no_channel';
+      return this.userChannel;
     },
   },
   methods: {
@@ -67,8 +80,11 @@ export default {
     onInput(value) {
       this.$emit('updateFilter', value);
     },
-    refreshSeating() {
-      this.$root.$emit('refreshSeating');
+    onRefreshSeating() {
+      this.$set(this, 'loading', true);
+      this.$root.$emit('refreshSeating', () => {
+        this.$set(this, 'loading', false);
+      });
     },
   },
 }
