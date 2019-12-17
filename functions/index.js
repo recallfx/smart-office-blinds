@@ -57,7 +57,37 @@ exports.command = functions.https.onRequest((req, res) => {
     } catch (error) {
       // [START sendErrorResponse]
       res.json({ commands, writeResult: null });
-      // [END sendErrorResponse]      
+      // [END sendErrorResponse]
+    }
+  });
+});
+
+// [START trigger]
+exports.setChannelStatus = functions.https.onRequest((req, res) => {
+  return cors(req, res, async () => {
+    // if (req.body.auth_token !== '3a081d8d4cd1ee3ef0fc617636b5634e9635fabb') {
+    //   return res.status(401).json({message:'Authentication Required!'});
+    // }
+
+    const { channel, status, action = null } = req.query;
+
+    try {
+      const channelDocRef = admin.firestore().collection('channels').doc(channel);
+      const doc = await channelDocRef.get();
+
+      let params = {
+        status: status
+      }
+
+      if (action !== null) {
+        params.last_action = action;
+      }
+
+      const writeResult = await channelDocRef.set(params, { merge: true });
+
+      return res.status(200).json({ writeResult });
+    } catch (err) {
+      return res.status(400).json({message: 'Internal Error', err});
     }
   });
 });
@@ -94,7 +124,7 @@ exports.setCommand = functions.https.onCall(async (data, context) => {
     console.log(error);
 
     return { message: error, code: 500 };
-    // [END sendErrorResponse]      
+    // [END sendErrorResponse]
   }
 });
 
