@@ -11,7 +11,7 @@ class SmartBlinds():
         self.processors = {}
 
         for key, channel in channels.items():
-            print('Initialising channel processor: {0}'.format(key))
+            print('[INFO] Initialising channel processor: {0}'.format(key))
             self.processors[key] = Processor(channel, key, debug_mode)
             self.processors[key].start()
 
