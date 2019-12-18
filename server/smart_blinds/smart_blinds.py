@@ -6,7 +6,7 @@ from .processor import Processor
 
 
 class SmartBlinds():
-    def __init__(self, channels, debug_mode=False):
+    def __init__(self, channels, state_queue, debug_mode=False):
         if channels is None:
             raise AssertionError('Missing channels')
 
@@ -14,7 +14,7 @@ class SmartBlinds():
 
         for key, channel in channels.items():
             logging.info('Initialising channel processor: {0}'.format(key))
-            self.processors[key] = Processor(channel, key, debug_mode)
+            self.processors[key] = Processor(channel, key, state_queue, debug_mode)
             self.processors[key].start()
 
     def command(self, action, channel_name=None):

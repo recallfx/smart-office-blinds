@@ -61,12 +61,11 @@ class ChannelStatus():
 
 
 ACCEPTED_CHANGE_TYPE_NAME = 'ADDED'
-SERVICE_ACCOUNT_KEY_FILE_NAME = 'service_account_key.json'
 
 
 class Firestore():
-
-    def __init__(self, channels, command_callback):
+    def __init__(self, command_callback):
+        logging.info('[Firestore] Start initialising firestore connection')
         self.doc_watch = None
         self.command_callback = command_callback
 
@@ -76,11 +75,10 @@ class Firestore():
         firebase_admin.initialize_app(cred)
 
         self.db = firestore.client()
-
-        self.init_db(channels)
+        logging.info('[Firestore] End initialising firestore connection')
 
     def init_db(self, channels):
-        logging.info('Initialising channels')
+        logging.info('[Firestore] Start db initialization')
 
         for key, channel in channels.items():
             logging.info('Initialising channel in firestore: {0}'.format(key))
@@ -96,6 +94,7 @@ class Firestore():
                 ChannelFields.LAST_ACTION: '',
                 ChannelFields.AVAILBLE_ACTIONS: [Actions.OPEN, Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.CLOSE, Actions.STOP],
             }, merge=True)
+        logging.info('[Firestore] End db initialization')
 
     def on_snapshot(self, docs, changes, read_time):
         for change in changes:
@@ -104,6 +103,7 @@ class Firestore():
                     CommandFields.ACTION), change.document.get(CommandFields.CHANNEL))
 
     def start(self):
+        logging.info('[Firestore] Start watchign db changes')
         colection_ref = self.db.collection(Collections.COMMANDS)
         query_ref = colection_ref.order_by(
             CommandFields.TIMESTAMP, direction=firestore.Query.DESCENDING).limit(1)
@@ -111,13 +111,6 @@ class Firestore():
 
     def stop(self):
         if self.doc_watch != None:
+            logging.info('[Firestore] End watchign db changes')
             self.doc_watch.unsubscribe()
             self.doc_watch = None
-
-    def update_db_channel_status(self, channel_name, action, status):
-        params = {'status': status}
-
-        if action != None:
-            params['last_action'] = action
-
-        self.db.collection(Collections.CHANNELS).document(channel_name).update(params)
