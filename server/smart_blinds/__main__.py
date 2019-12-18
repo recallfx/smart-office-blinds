@@ -7,8 +7,6 @@ from .firestore import Firestore
 from .smart_blinds import SmartBlinds
 from .utils import validate_command
 
-logging.basicConfig(level=logging.DEBUG)
-
 
 def main():
 
@@ -18,13 +16,21 @@ def main():
                         version='%(prog)s 2.0')
     parser.add_argument('-s', '--server', action='store_true',
                         help='Run as a service. All other arguments are ignored.')
-    parser.add_argument('-action', nargs='?', choices=[
+    parser.add_argument('-a', '--action', nargs='?', choices=[
                         Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.OPEN, Actions.CLOSE, Actions.STOP],
                         default=Actions.STOP)
     parser.add_argument('-c', '--channel', dest='channel', default=None,
                         help='Channel is a servo name assigned to specific remote buttons')
+    parser.add_argument('-d', '--debug', action='store_true')
 
     args = parser.parse_args()
+
+    if (args.debug):
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    logging.basicConfig(level=level)
 
     firestore = None
     smart_blinds = SmartBlinds(config['channels'], config['debug'])
