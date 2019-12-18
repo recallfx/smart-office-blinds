@@ -62,8 +62,8 @@ class Processor(Process):
         if (action is not None):
             data['action'] = action
 
-        response = requests.get(config['cloudFunctionsUrl'] +
-                                'setChannelStatus', params=data)
+        # response = requests.get(config['cloudFunctionsUrl'] +
+        #                         'setChannelStatus', params=data)
 
         print('[INFO] Update channel {} action "{}" status "{}"'.format(
             self.channel_name, action, status))
