@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import requests
+import logging
 from multiprocessing import Process, Queue
 
-from .actions import Actions
-from .channel_statuses import ChannelStatuses
-from .blinds_api import BlindsApi
+import requests
 
+from .actions import Actions
+from .blinds_api import BlindsApi
+from .channel_statuses import ChannelStatuses
 from .config import config
+
 
 class Processor(Process):
     def __init__(self, channel, channel_name, debug_mode, **kwargs):
@@ -57,7 +59,8 @@ class Processor(Process):
             pass
 
     def update_channel_status(self, status, action=None):
-        data = {'channel': self.channel_name, 'status': status, 'auth_token': config['availableApiTokens'][0]}
+        data = {'channel': self.channel_name, 'status': status,
+                'auth_token': config['availableApiTokens'][0]}
 
         if (action is not None):
             data['action'] = action
@@ -65,8 +68,8 @@ class Processor(Process):
         # response = requests.get(config['cloudFunctionsUrl'] +
         #                         'setChannelStatus', params=data)
 
-        print('[INFO] Update channel {} action "{}" status "{}"'.format(
+        logging.info('Update channel {} action "{}" status "{}"'.format(
             self.channel_name, action, status))
 
-        if self.debug_mode:
-            print('[DEBUG] Response: {}'.format(response.text))
+        # if self.debug_mode:
+        #     logging.debuge('Response: {}'.format(response.text))

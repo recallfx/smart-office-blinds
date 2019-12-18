@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import logging
+
 from .processor import Processor
 
 
@@ -11,12 +13,13 @@ class SmartBlinds():
         self.processors = {}
 
         for key, channel in channels.items():
-            print('[INFO] Initialising channel processor: {0}'.format(key))
+            logging.info('Initialising channel processor: {0}'.format(key))
             self.processors[key] = Processor(channel, key, debug_mode)
             self.processors[key].start()
 
     def command(self, action, channel_name=None):
-        print('[INFO] Received command action: {}, channel name: {}'.format(action, channel_name))
+        logging.info('Received command action: {}, channel name: {}'.format(
+            action, channel_name))
         self.processors[channel_name].queue.put(action)
 
     def join_processors(self):

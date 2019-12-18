@@ -1,10 +1,12 @@
 import datetime
+import logging
 import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 from .config import config
+
 
 class Collections():
     CHANNELS = 'channels'
@@ -78,10 +80,10 @@ class Firestore():
         self.init_db(channels)
 
     def init_db(self, channels):
-        print('[INFO] Initialising channels')
+        logging.info('Initialising channels')
 
         for key, channel in channels.items():
-            print('[INFO] Initialising channel in firestore: {0}'.format(key))
+            logging.info('Initialising channel in firestore: {0}'.format(key))
 
             label = channel[ChannelFields.LABEL]
 

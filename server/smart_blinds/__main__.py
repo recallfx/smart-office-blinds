@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 from .actions import Actions
 from .config import config
@@ -6,8 +7,11 @@ from .firestore import Firestore
 from .smart_blinds import SmartBlinds
 from .utils import validate_command
 
+logging.basicConfig(level=logging.DEBUG)
+
 
 def main():
+
     parser = argparse.ArgumentParser(prog='Smart Office Blinds server',
                                      description='Server instance that is dependent on firebase vonnection')
     parser.add_argument('-v', '--version', action='version',
@@ -35,11 +39,11 @@ def main():
             message = validate_command(
                 config['channels'], args.action, args.channel)
             smart_blinds.command(args.action, args.channel)
-            print('[INFO] {}'.format(message))
+            logging.info(message)
 
         smart_blinds.join_processors()
     except KeyboardInterrupt:
-        print('[INFO] Exiting')
+        logging.info('Exiting')
 
         if firestore != None:
             firestore.stop()
