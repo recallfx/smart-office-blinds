@@ -1,7 +1,6 @@
 {
-  "name": "oberlo-smart-office-blinds",
+  "name": "smart-office-blinds",
   "version": "2.0.0",
-  "main": "client/src/index.js",
   "license": "MIT",
   "scripts": {
     "lint": "eslint constants.js client/src/ functions/src/",
