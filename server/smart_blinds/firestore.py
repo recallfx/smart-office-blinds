@@ -113,3 +113,11 @@ class Firestore():
         if self.doc_watch != None:
             self.doc_watch.unsubscribe()
             self.doc_watch = None
+
+    def update_db_channel_status(self, channel_name, action, status):
+        params = {'status': status}
+
+        if action != None:
+            params['last_action'] = action
+
+        self.db.collection(Collections.CHANNELS).document(channel_name).update(params)
