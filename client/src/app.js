@@ -312,9 +312,8 @@ new Vue({
         this.logException(error);
       }
 
-      if (callback) {
-        callback();
-      }
+      // eslint-ignore-next line callback-return
+      callback();
     },
 
     async refreshSeating(callback) {
@@ -334,9 +333,8 @@ new Vue({
         this.logException(error);
       }
 
-      if (callback) {
-        callback();
-      }
+      // eslint-ignore-next line callback-return
+      callback();
     },
   },
 });

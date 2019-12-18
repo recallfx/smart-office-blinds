@@ -18,7 +18,7 @@
         :key="action"
         :channel-name="name"
         :action="action"
-        :disabled="!hasCorrectDomain || busy || isCurrentActionButton(action)"
+        :disabled="!hasCorrectDomain || busy"
         @command="onCommand"
       />
     </div>
@@ -67,10 +67,6 @@ export default {
   },
 
   methods: {
-    isCurrentActionButton(action) {
-      return action === this.lastAction;
-    },
-
     onCommand(channelName, action) {
       this.$set(this, 'loading', true);
       this.$root.$emit('command', channelName, action, () => {
