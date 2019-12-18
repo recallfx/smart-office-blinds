@@ -1,6 +1,6 @@
-# Smart Office Blinds v2.0
+# 🧠🏢 Blinds v2.0
 
-Blinds controlled mechanically pressing the button on the remote using servo motors (one per two buttons - up/down) 
+Smart office blinds controlled mechanically pressing the button on the remote using servo motors (one per two buttons - up/down) 
 
 ## Prerequisites
 
