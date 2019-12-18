@@ -4,7 +4,7 @@ After=network.target pigpiod.service
 
 [Service]
 User=root
-WorkingDirectory=/home/pi/projects/smart-office-blinds
+WorkingDirectory=/home/pi/projects/smart-office-blinds/server
 ExecStart=/home/pi/projects/smart-office-blinds/server/bin/server
 Restart=always
 
