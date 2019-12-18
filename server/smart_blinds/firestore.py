@@ -92,7 +92,7 @@ class Firestore():
                 ChannelFields.LABEL: label,
                 ChannelFields.STATUS: Actions.IDLE,
                 ChannelFields.LAST_ACTION: '',
-                ChannelFields.AVAILBLE_ACTIONS: [Actions.OPEN, Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.CLOSE],
+                ChannelFields.AVAILBLE_ACTIONS: [Actions.OPEN, Actions.OPEN_30_PERCENT, Actions.POSITION_TOGGLE, Actions.CLOSE, Actions.STOP],
             }, merge=True)
 
     def on_snapshot(self, docs, changes, read_time):

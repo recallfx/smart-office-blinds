@@ -16,6 +16,7 @@ class SmartBlinds():
             self.processors[key].start()
 
     def command(self, action, channel_name=None):
+        print('[INFO] Received command action: {}, channel name: {action}'.format(channel_name))
         self.processors[channel_name].queue.put(action)
 
     def join_processors(self):
