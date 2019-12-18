@@ -1,0 +1,64 @@
+{
+  "channels": {
+    "remote_10_channel1": {
+      "label": "POD",
+      "output_pin": 5,
+      "action_idle": {
+        "angle": 1400,
+        "sleep": 1
+      },
+      "action_open": {
+        "angle": 900,
+        "sleep": 3
+      },
+      "action_close": {
+        "angle": 1800,
+        "sleep": 3
+      },
+      "coordinates": [
+        {
+          "x": 485,
+          "y": 575
+        },
+        {
+          "x": 574,
+          "y": 575
+        },
+        {
+          "x": 574,
+          "y": 630
+        },
+        {
+          "x": 485,
+          "y": 630
+        }
+      ]
+    }
+  },
+  "debug": true,
+  "cloudFunctionsUrl": "https://--------------------------------.cloudfunctions.net/",
+  "SLACK_VERIFICATION_TOKEN": "--------------------------------",
+  "SLACK_OAUTH_ACCESS_TOKEN": "--------------------------------",
+  "officeSpaceAPIToken": "--------------------------------",
+  "adminEmails": [
+    "--------------------------------@--------------------------------.com"
+  ],
+  "allowedDomains": [
+    "--------------------------------.com"
+  ],
+  "officeSpaceUrl": "https://shopify.officespacesoftware.com",
+  "officeSpaceSeatsQueryUrl": "/api/1/seats?floor_id=--------------------------------",
+  "firebaseConfig": {
+    "apiKey": "---------------------------------4X5CZ7zjx0qbd3NWYsxxA75GpUikI",
+    "authDomain": "--------------------------------.firebaseapp.com",
+    "databaseURL": "https://--------------------------------.firebaseio.com",
+    "projectId": "--------------------------------",
+    "storageBucket": "--------------------------------.appspot.com",
+    "messagingSenderId": "--------------------------------",
+    "appId": "--------------------------------"
+  },
+  "availableApiTokens": [
+    "--------------------------------"
+  ],
+  "serviceAccountFileName": "service_account_key.json"
+}
