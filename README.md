@@ -39,7 +39,7 @@ yarn firebase deploy
 ```bash
 sudo apt install build-essential libssl-dev libffi-dev python3-dev
 sudo pip3 install -r server/requirements.txt
-sudo cp server/etc/systemd/system/* etc/systemd/system/
+sudo cp server/etc/systemd/system/* /etc/systemd/system/
 ```
 
 ### Systemd
