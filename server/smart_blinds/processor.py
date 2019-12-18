@@ -14,7 +14,7 @@ from .config import config
 class Processor(Process):
     def __init__(self, channel, channel_name, debug_mode, **kwargs):
         super(Processor, self).__init__()
-        self.queue = Queue(1)
+        self.queue = Queue()
         self.kwargs = kwargs
         self.blinds = BlindsApi(channel, debug_mode)
         self.channel_name = channel_name
