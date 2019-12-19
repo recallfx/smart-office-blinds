@@ -66,7 +66,7 @@ sudo ./bin/server
 
 ```
 cd server
-python3 -m smart_blinds open -c channel_name
+python3 -m smart_blinds --action open -c channel_name
 python3 -m smart_blinds -s
 ```
 

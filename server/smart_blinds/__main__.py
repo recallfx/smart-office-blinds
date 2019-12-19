@@ -1,6 +1,6 @@
 import argparse
 import logging
-
+import time
 from multiprocessing import Queue
 
 from .actions import Actions
@@ -10,6 +10,24 @@ from .firestore_state import FirestoreState
 from .firestore_watch import FirestoreWatch
 from .smart_blinds import SmartBlinds
 from .utils import validate_command
+
+CHECK_ACTIVE_TIMER_INTERVAL = 1.0
+
+
+def server(firestore_watch):
+    firestore_watch.start()
+
+    while True:
+        try:
+            logging.debug('Checking firebase watch')
+            if not firestore_watch.is_active():
+                logging.info('Restarting firebase watch')
+                firestore_watch.start()
+
+            time.sleep(CHECK_ACTIVE_TIMER_INTERVAL)
+
+        except Exception as ex:
+            logging.exception(ex)
 
 
 def main():
@@ -26,7 +44,8 @@ def main():
     parser.add_argument('-c', '--channel', dest='channel', default=None,
                         help='Channel is a servo name assigned to specific remote buttons')
     parser.add_argument('-d', '--debug', action='store_true')
-    parser.add_argument('-i', '--init', action='store_true', help='Initialise database schema')
+    parser.add_argument('-i', '--init', action='store_true',
+                        help='Initialise database schema')
 
     args = parser.parse_args()
 
@@ -40,25 +59,28 @@ def main():
     state_queue = Queue()
     firestore_watch = None
     firestore_state = None
-    smart_blinds = SmartBlinds(config['channels'], state_queue, config['debug'])
+    smart_blinds = SmartBlinds(
+        config['channels'], state_queue, config['debug'])
 
     try:
         firestore_state = FirestoreState(state_queue)
         firestore_state.start()
 
-        firestore_watch = FirestoreWatch(lambda action, channel: smart_blinds.command(action, channel))
+        firestore_watch = FirestoreWatch(
+            lambda action, channel: smart_blinds.command(action, channel))
 
         if (args.init):
             init_db(config['channels'])
 
         if (args.server):
-            firestore_watch.start()
+            server(firestore_watch)
         else:
-            message = validate_command(config['channels'], args.action, args.channel)
+            message = validate_command(
+                config['channels'], args.action, args.channel)
             smart_blinds.command(args.action, args.channel)
             logging.info(message)
+            time.sleep(5.0)
 
-        smart_blinds.join_processors()
     except KeyboardInterrupt:
         pass
     except Exception as ex:
@@ -68,6 +90,7 @@ def main():
 
         if firestore_watch != None:
             firestore_watch.stop()
+
 
 if __name__ == "__main__":
     main()
