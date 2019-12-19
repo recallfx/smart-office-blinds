@@ -1,13 +1,13 @@
 import datetime
 import logging
 import os
+import time
 from multiprocessing import Process
 
-import firebase_admin
 from firebase_admin import credentials, firestore
 
 from .config import config
-from .firestore import Collections
+from .firestore import Collections, get_db_client
 
 
 class FirestoreState(Process):
@@ -15,17 +15,11 @@ class FirestoreState(Process):
         super(FirestoreState, self).__init__()
 
         self.queue = queue
-        self.started = False
 
     def run(self):
-        logging.info('[FirestoreState] Start initialising firestore connection')
-        cred_path = os.path.join('../', config['serviceAccountFileName'])
-        cred = credentials.Certificate(cred_path)
+        logging.info(
+            '[FirestoreState] Start initialising firestore connection')
 
-        firebase_admin.initialize_app(cred)
-
-        self.db = firestore.client()
-        logging.info('[FirestoreState] End initialising firestore connection')
         logging.info('[FirestoreState] Start waiting for state queue')
 
         try:
@@ -44,11 +38,19 @@ class FirestoreState(Process):
         if action != None:
             params['last_action'] = action
 
-        logging.info('[FirestoreState] Updating firestore channel: {}, action: {}, status: {}'.format(
+        logging.debug('[FirestoreState] Updating firestore channel: {}, action: {}, status: {}'.format(
             channel_name, action, status))
 
-        try:
-            self.db.collection(Collections.CHANNELS).document(
-                channel_name).set(params, merge=True)
-        except Exception as ex:
-            logging.exception(str(ex))
+        while True:
+            try:
+                logging.debug('[FirestoreState] Getting db client')
+                db = get_db_client()
+                logging.debug('[FirestoreState] Got db client, setting data')
+                db.collection(Collections.CHANNELS).document(
+                    channel_name).set(params, merge=True)
+                logging.debug('[FirestoreState] Data set')
+            except Exception as ex:
+                logging.exception(str(ex))
+                time.sleep(0.5)
+                continue
+            break

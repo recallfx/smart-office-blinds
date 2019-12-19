@@ -5,8 +5,9 @@ from multiprocessing import Queue
 
 from .actions import Actions
 from .config import config
-from .firestore import Firestore
+from .firestore import get_db_client, init_db
 from .firestore_state import FirestoreState
+from .firestore_watch import FirestoreWatch
 from .smart_blinds import SmartBlinds
 from .utils import validate_command
 
@@ -37,7 +38,7 @@ def main():
     logging.basicConfig(level=level)
 
     state_queue = Queue()
-    firestore = None
+    firestore_watch = None
     firestore_state = None
     smart_blinds = SmartBlinds(config['channels'], state_queue, config['debug'])
 
@@ -45,13 +46,13 @@ def main():
         firestore_state = FirestoreState(state_queue)
         firestore_state.start()
 
-        firestore = Firestore(lambda action, channel: smart_blinds.command(action, channel))
+        firestore_watch = FirestoreWatch(lambda action, channel: smart_blinds.command(action, channel))
 
         if (args.init):
-            firestore.init_db(config['channels'])
+            init_db(config['channels'])
 
         if (args.server):
-            firestore.start()
+            firestore_watch.start()
         else:
             message = validate_command(config['channels'], args.action, args.channel)
             smart_blinds.command(args.action, args.channel)
@@ -65,8 +66,8 @@ def main():
     finally:
         logging.info('Exiting')
 
-        if firestore != None:
-            firestore.stop()
+        if firestore_watch != None:
+            firestore_watch.stop()
 
 if __name__ == "__main__":
     main()
