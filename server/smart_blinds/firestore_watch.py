@@ -10,7 +10,7 @@ from .firestore import (Actions, ChannelFields, Collections, CommandFields,
 
 ACCEPTED_CHANGE_TYPE_NAME = 'ADDED'
 MAX_ACTIVE_INTERVAL_SECONDS = 18000
-MAX_COMMAND_DELAY = 10
+MAX_COMMAND_DELAY_SECONDS = 10
 
 
 class FirestoreWatch():
@@ -27,12 +27,14 @@ class FirestoreWatch():
                 datetime.timestamp(timestamp))
             elapsed_seconds = (now-change_datetime).seconds
 
-            if (elapsed_seconds > MAX_COMMAND_DELAY):
+            logging.debug('Commmand issued {} seconds ago'.format(elapsed_seconds))
+
+            if (elapsed_seconds < MAX_COMMAND_DELAY_SECONDS):
                 if change.type.name == ACCEPTED_CHANGE_TYPE_NAME:
                     self.command_callback(change.document.get(
                         CommandFields.ACTION), change.document.get(CommandFields.CHANNEL))
             else:
-                logging.debug('Skipping outdated commmand')
+                logging.debug('Skipping outdated commmand: {} seconds ago'.format(elapsed_seconds))
 
     def is_active(self):
         date_now = datetime.now()
