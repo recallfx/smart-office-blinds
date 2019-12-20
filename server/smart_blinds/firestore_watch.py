@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 
 from firebase_admin import credentials, firestore
 
@@ -10,6 +10,7 @@ from .firestore import (Actions, ChannelFields, Collections, CommandFields,
 
 ACCEPTED_CHANGE_TYPE_NAME = 'ADDED'
 MAX_ACTIVE_INTERVAL_SECONDS = 18000
+MAX_COMMAND_DELAY = 10
 
 
 class FirestoreWatch():
@@ -18,10 +19,20 @@ class FirestoreWatch():
         self.command_callback = command_callback
 
     def on_snapshot(self, docs, changes, read_time):
+        now = datetime.now()
+
         for change in changes:
-            if change.type.name == ACCEPTED_CHANGE_TYPE_NAME:
-                self.command_callback(change.document.get(
-                    CommandFields.ACTION), change.document.get(CommandFields.CHANNEL))
+            timestamp = change.document.get(CommandFields.TIMESTAMP)
+            change_datetime = datetime.fromtimestamp(
+                datetime.timestamp(timestamp))
+            elapsed_seconds = (now-change_datetime).seconds
+
+            if (elapsed_seconds > MAX_COMMAND_DELAY):
+                if change.type.name == ACCEPTED_CHANGE_TYPE_NAME:
+                    self.command_callback(change.document.get(
+                        CommandFields.ACTION), change.document.get(CommandFields.CHANNEL))
+            else:
+                logging.debug('Skipping outdated commmand')
 
     def is_active(self):
         date_now = datetime.now()
