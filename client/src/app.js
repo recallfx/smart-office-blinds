@@ -308,15 +308,15 @@ new Vue({
         } else {
           this.logMessage(result);
 
-          // eslint-ignore-next line callback-return
-          callback(false);
+          return callback(false);
         }
       } catch (error) {
         this.logException(error);
 
-        // eslint-ignore-next line callback-return
-        callback(error);
+        return callback(error);
       }
+
+      return null;
     },
 
     async refreshSeating(callback) {
