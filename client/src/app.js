@@ -307,13 +307,16 @@ new Vue({
           this.logException(result.data.message.details);
         } else {
           this.logMessage(result);
+
+          // eslint-ignore-next line callback-return
+          callback(false);
         }
       } catch (error) {
         this.logException(error);
-      }
 
-      // eslint-ignore-next line callback-return
-      callback();
+        // eslint-ignore-next line callback-return
+        callback(error);
+      }
     },
 
     async refreshSeating(callback) {

@@ -5,7 +5,7 @@
         <div class="Polaris-Page-Header__TitleActionMenuWrapper">
           <div class="Polaris-Page-Header__Title">
             <div>
-              <h1 class="Polaris-DisplayText Polaris-DisplayText--sizeLarge">Smart office blinds</h1>
+              <h1 class="Polaris-DisplayText Polaris-DisplayText--sizeLarge">🧠🏢 blinds v2.0</h1>
             </div>
           </div>
         </div>

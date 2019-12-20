@@ -2,23 +2,23 @@
   <div class="Polaris-Card__Section">
     <div class="Polaris-Card__SectionHeader">
 
-      <div class="Polaris-Stack Polaris-Stack--alignmentBaseline">
-        <div class="Polaris-Stack__Item Polaris-Stack__Item--fill">
+      <div class="Polaris-Stack Polaris-Stack--alignmentCenter">
+        <div class="Polaris-Stack__Item">
           <h3 class="Polaris-Subheading">{{label}}</h3>
         </div>
-        <!-- <div class="Polaris-Stack__Item" v-if="busy">
+        <div class="Polaris-Stack__Item">
           <span class="Polaris-Badge Polaris-Badge--statusInfo"><span class="Polaris-VisuallyHidden">Info</span><span class="Polaris-Badge__Content">{{ capitalizedStatus }}</span></span>
-        </div> -->
+        </div>
       </div>
     </div>
 
-    <div class="Polaris-ButtonGroup">
+    <div class="Polaris-ButtonGroup Polaris-ButtonGroup--segmented" data-buttongroup-segmented="true">
       <action
         v-for="action in availableActions"
         :key="action"
         :channel-name="name"
         :action="action"
-        :disabled="!hasCorrectDomain || busy"
+        :disabled="disabled"
         @command="onCommand"
       />
     </div>
@@ -33,6 +33,11 @@ import Commands from "./commands.vue";
 import {capitalize} from '../utils';
 
 const IDLE = 'idle';
+const SENDING_REQUEST = 'sending request';
+const WORKING = 'working';
+
+let timeoutId = null;
+const MAX_WORKING_TIMEOUT = 120000;
 
 export default {
   components: {
@@ -50,15 +55,15 @@ export default {
   },
   data() {
     return {
-      loading: false,
+      localStatus: IDLE,
     };
   },
   computed: {
-    busy() {
-      return this.loading || this.status !== IDLE;
+    disabled() {
+      return !this.hasCorrectDomain || this.localStatus !== IDLE;
     },
     capitalizedStatus() {
-      return capitalize(this.status);
+      return capitalize(this.localStatus);
     },
 
     channelCommands() {
@@ -66,11 +71,34 @@ export default {
     },
   },
 
+  watch: {
+    status(newStatus, oldStatus) {
+      this.$set(this, 'localStatus', newStatus);
+    },
+
+    localStatus(newLocalStatus, oldLocalStatus) {
+      if (newLocalStatus !== oldLocalStatus) {
+        if (newLocalStatus !== IDLE) {
+          // start timer
+          timeoutId = setTimeout(() => {
+            this.$set(this, 'localStatus', IDLE);
+          }, MAX_WORKING_TIMEOUT)
+        } else {
+          // stop timer
+          clearTimeout(timeoutId)
+        }
+      }
+    },
+  },
+
   methods: {
     onCommand(channelName, action) {
-      this.$set(this, 'loading', true);
-      this.$root.$emit('command', channelName, action, () => {
-        this.$set(this, 'loading', false);
+      this.$set(this, 'localStatus', SENDING_REQUEST);
+
+      this.$root.$emit('command', channelName, action, (error) => {
+        if (error) {
+          this.$set(this, 'localStatus', IDLE);
+        }
       });
     },
   },

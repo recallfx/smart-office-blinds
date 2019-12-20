@@ -26,7 +26,7 @@
             <div class="Polaris-ButtonGroup__Item">
               <button
                 type="button"
-                class="Polaris-Button"
+                class="Polaris-Button Polaris-Button--sizeSlim"
                 :class="{'Polaris-Button--disabled': loading }"
                 :disabled="loading"
                 @click="onRefreshSeating"

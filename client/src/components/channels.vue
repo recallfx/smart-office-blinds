@@ -1,6 +1,6 @@
 <template>
   <div class="Polaris-Layout__Section">
-    <div class="Polaris-Card">
+    <div class="Polaris-Card" v-if="hasChannels">
       <div class="Polaris-Card__Header">
         <h2 class="Polaris-Heading">Channel list</h2>
       </div>
@@ -31,5 +31,10 @@ export default {
       commands: Array,
       hasCorrectDomain: Boolean,
   },
+  computed: {
+    hasChannels() {
+      return this.channels && this.channels.length > 0;
+    }
+  }
 };
 </script>
