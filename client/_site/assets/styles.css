@@ -1,3 +1,7 @@
-.error { 
-    color:#DE3618 
+.error {
+    color:#DE3618
+}
+
+.commands {
+  list-style: none;
 }
