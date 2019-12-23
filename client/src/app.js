@@ -2,6 +2,8 @@ import firebase from '@firebase/app';
 import '@firebase/auth';
 import '@firebase/firestore';
 import '@firebase/functions';
+import '@firebase/performance';
+import '@firebase/analytics';
 import { firebaseConfig, allowedDomains } from '../../config.json';
 import { databaseCollections, dataCollectionDocuments } from '../../constants';
 import Vue from 'vue/dist/vue.esm.browser';
@@ -56,7 +58,7 @@ new Vue({
       this.unsubscribe(channelName);
     });
 
-    this.$on('refreshSeating', (callback) => {
+    this.$on('refreshSeating', callback => {
       this.clearException();
       this.refreshSeating(callback);
     });
@@ -81,12 +83,18 @@ new Vue({
       try {
         this.firebaseApp = firebase.initializeApp(this.firebaseConfig);
 
+        this.perf = firebase.performance();
+
+        this.analytics = firebase.analytics();
+
         // https://support.google.com/firebase/answer/7015592
         const isProduction = window.location.hostname !== 'localhost';
         const functionsEmulatorUrl = 'http://localhost:5001';
 
         if (!isProduction) {
-          this.firebaseApp.functions().useFunctionsEmulator(functionsEmulatorUrl);
+          this.firebaseApp
+            .functions()
+            .useFunctionsEmulator(functionsEmulatorUrl);
         }
 
         this.$set(this, 'firebaseLoaded', true);
@@ -184,7 +192,7 @@ new Vue({
           .get();
 
         querySnapshot.forEach(doc => {
-          const data = Object.assign({ realTime: false }, doc.data())
+          const data = Object.assign({ realTime: false }, doc.data());
 
           channels.push(data);
         });
@@ -201,7 +209,7 @@ new Vue({
       );
 
       if (index > 0) {
-        this.logMessage('RealTime update: ' + JSON.stringify(channel))
+        this.logMessage('RealTime update: ' + JSON.stringify(channel));
         this.$set(this.channels, index, channel);
       }
     },
@@ -301,13 +309,20 @@ new Vue({
     },
 
     async command(channel, action, callback) {
-      const setCommand = this.firebaseApp.functions().httpsCallable('setCommand');
+      const setCommand = this.firebaseApp
+        .functions()
+        .httpsCallable('setCommand');
 
       try {
+        this.analytics.logEvent('command', { channel, action });
+
         const result = await setCommand({ channel, action });
 
         if (result.data && result.data.code !== 200) {
-          const message =  typeof result.data.message === 'string' ?  result.data.message : result.data.message.details;
+          const message =
+            typeof result.data.message === 'string'
+              ? result.data.message
+              : result.data.message.details;
 
           throw new Error(message);
         } else {
