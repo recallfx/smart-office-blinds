@@ -14,6 +14,7 @@
         :status="channel.status"
         :commands="commands"
         :has-correct-domain="hasCorrectDomain"
+        :real-time="channel.realTime"
       />
     </div>
   </div>

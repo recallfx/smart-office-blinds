@@ -52,11 +52,22 @@ export default {
     status: String,
     commands: Array,
     hasCorrectDomain: Boolean,
+    realTime: Boolean,
   },
   data() {
     return {
       localStatus: IDLE,
     };
+  },
+  mounted() {
+    if (this.realTime) {
+      this.$root.$emit('subscribe', this.name);
+    }
+  },
+  beforeDestroy() {
+    if (this.realTime) {
+      this.$root.$emit('unsubscribe', this.name);
+    }
   },
   computed: {
     disabled() {
@@ -73,11 +84,13 @@ export default {
 
   watch: {
     status(newStatus, oldStatus) {
-      this.$set(this, 'localStatus', newStatus);
+      if (this.realTime) {
+        this.$set(this, 'localStatus', newStatus);
+      }
     },
 
     localStatus(newLocalStatus, oldLocalStatus) {
-      if (newLocalStatus !== oldLocalStatus) {
+      if (this.realTime && newLocalStatus !== oldLocalStatus) {
         if (newLocalStatus !== IDLE) {
           // start timer
           timeoutId = setTimeout(() => {
@@ -96,7 +109,7 @@ export default {
       this.$set(this, 'localStatus', SENDING_REQUEST);
 
       this.$root.$emit('command', channelName, action, (error) => {
-        if (error) {
+        if (!this.realTime || error) {
           this.$set(this, 'localStatus', IDLE);
         }
       });

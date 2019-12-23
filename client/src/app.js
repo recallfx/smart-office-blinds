@@ -184,7 +184,9 @@ new Vue({
           .get();
 
         querySnapshot.forEach(doc => {
-          channels.push(doc.data());
+          const data = Object.assign({ realTime: false }, doc.data())
+
+          channels.push(data);
         });
 
         this.$set(this, 'channels', channels);
@@ -199,6 +201,7 @@ new Vue({
       );
 
       if (index > 0) {
+        this.logMessage('RealTime update: ' + JSON.stringify(channel))
         this.$set(this.channels, index, channel);
       }
     },
@@ -230,7 +233,7 @@ new Vue({
           .firestore()
           .collection(databaseCollections.commands)
           .orderBy('timestamp', 'desc')
-          .limit(1);
+          .limit(3);
 
         this.unsubscribeCommandsCb = commandsRef.onSnapshot(
           querySnapshot => {
@@ -304,7 +307,9 @@ new Vue({
         const result = await setCommand({ channel, action });
 
         if (result.data && result.data.code !== 200) {
-          this.logException(result.data.message.details);
+          const message =  typeof result.data.message === 'string' ?  result.data.message : result.data.message.details;
+
+          throw new Error(message);
         } else {
           this.logMessage(result);
 
@@ -315,8 +320,6 @@ new Vue({
 
         return callback(error);
       }
-
-      return null;
     },
 
     async refreshSeating(callback) {

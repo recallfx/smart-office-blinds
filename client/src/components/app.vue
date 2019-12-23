@@ -36,7 +36,8 @@
             v-if="isLoggedIn"
             :channels="channelsToShow"
             :has-correct-domain="hasCorrectDomain"
-            :commands="commands" />
+            :commands="commands"
+          />
         </template>
       </div>
     </div>
@@ -77,14 +78,14 @@ export default {
     },
   },
   watch: {
-    userChannel: function(newChannel) {
-        this.$set(this, 'filter', newChannel === 'no_channel'? filterAll : filterMy )
+    userChannel(newChannel) {
+        this.$set(this, 'filter', newChannel ? filterMy : filterAll)
     },
   },
   computed: {
     channelsToShow() {
         if (this.filter === filterMy) {
-            return this.channels.filter(c => c.name === this.userChannel);
+            return this.channels.filter(c => c.name === this.userChannel).map((channel) => ({...channel, realTime: true}));
         }
 
         return this.channels;
