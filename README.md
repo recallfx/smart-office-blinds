@@ -1,6 +1,6 @@
 # 🧠🏢 Blinds v2.0
 
-![](https://github.com/recallfx/smart-office-blinds/blob/master/header.jpg?raw=true)
+![](https://github.com/recallfx/smart-office-blinds/blob/master/assets/header.jpg?raw=true)
 
 Smart office blinds controlled mechanically pressing the button on the remote using servo motors (one per two buttons - up/down) 
 
@@ -80,3 +80,11 @@ On Mac Os you might need to use this to work:
 ```
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 ```
+
+
+## 3D print
+
+It was tested with PLA, 25% infill and 2 perimeters.
+
+[Assembly STL file](https://github.com/recallfx/smart-office-blinds/blob/master/assets/rack.stl?raw=true)
+[Print 3MF file](https://github.com/recallfx/smart-office-blinds/blob/master/assets/rack_print.3mf?raw=true)
