@@ -47,12 +47,13 @@ sudo cp server/etc/systemd/system/* /etc/systemd/system/
 ```bash
 sudo systemctl enable pigpiod
 sudo systemctl enable smart-blinds
+sudo systemctl restart smart-blinds
 ```
 
 View logs:
 
 ```bash
-journalctl -f scanteen-scanner
+journalctl -f smart-blinds
 ```
 
 ## Server

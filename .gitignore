@@ -78,3 +78,4 @@ service_account_key.json
 
 client/_site/assets/script.js
 functions/index.js
+.firebaserc
