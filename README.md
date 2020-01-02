@@ -1,5 +1,7 @@
 # 🧠🏢 Blinds v2.0
 
+![](https://github.com/recallfx/smart-office-blinds/blob/master/header.jpg?raw=true)
+
 Smart office blinds controlled mechanically pressing the button on the remote using servo motors (one per two buttons - up/down) 
 
 ## Prerequisites
